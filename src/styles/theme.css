@@ -1,0 +1,8 @@
+:root {
+  --pv-bg: #f6f2e9;
+  --pv-surface: rgba(255, 255, 255, 0.78);
+  --pv-border: rgba(157, 149, 138, 0.28);
+  --pv-text: #201d18;
+  --pv-text-muted: #6b645a;
+  --pv-accent: #5f8ecf;
+}

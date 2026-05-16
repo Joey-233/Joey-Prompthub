@@ -1,0 +1,41 @@
+{
+  "name": "prompthub",
+  "productName": "Prompt Hub",
+  "description": "桌面提示词工坊：悬浮球收录灵感、统一管理 AI 绘图与 LLM 提示词。",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "out/main/main.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "npm run typecheck && electron-vite build",
+    "preview": "electron-vite preview",
+    "rebuild:native": "electron-rebuild -f -w better-sqlite3",
+    "postinstall": "npm run rebuild:native",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.9.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.3",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^41.2.1",
+    "electron-vite": "^5.0.0",
+    "jsdom": "^29.0.2",
+    "typescript": "^6.0.3",
+    "vite": "^7.3.2",
+    "vitest": "^4.1.4"
+  }
+}

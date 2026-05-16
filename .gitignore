@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+
+# Build output
+out/
+dist/
+dist-electron/
+build/
+*.tsbuildinfo
+
+# Local SQLite database (本地用户数据, 不应进仓库)
+prompthub.db
+prompthub.db-shm
+prompthub.db-wal
+promptvault.db
+promptvault.db-shm
+promptvault.db-wal
+
+# Encrypted secret store (Electron safeStorage)
+secure-store.json
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+dev-*.log
+scripts/*.log
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Worktrees / Claude Code 工作目录 + 内部开发计划
+.worktrees/
+worktrees/
+.superpowers/
+.claude/
+docs/superpowers/
+
+# Temp
+*.tmp
+.tmp/
+.cache/

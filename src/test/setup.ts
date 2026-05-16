@@ -1,0 +1,119 @@
+import '@testing-library/jest-dom/vitest'
+import { afterEach, beforeEach, vi } from 'vitest'
+
+import { useAppStore } from '../stores/appStore'
+import { usePromptStore } from '../stores/promptStore'
+import { useTestBenchStore } from '../stores/testBenchStore'
+
+beforeEach(() => {
+  if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'promptHub', {
+      configurable: true,
+      value: {
+        prompts: {
+          list: vi.fn().mockResolvedValue([]),
+          create: vi.fn(),
+          update: vi.fn(),
+          delete: vi.fn()
+        },
+        generations: {
+          list: vi.fn().mockResolvedValue([]),
+          create: vi.fn()
+        },
+        settings: {
+          list: vi.fn().mockResolvedValue({
+            image_preset: 'mock-image'
+          }),
+          set: vi.fn()
+        },
+        secure: {
+          has: vi.fn().mockResolvedValue(false),
+          set: vi.fn(),
+          delete: vi.fn(),
+          reveal: vi.fn().mockResolvedValue(null)
+        },
+        ai: {
+          optimize: vi.fn().mockResolvedValue('')
+        },
+        image: {
+          openaiGenerate: vi.fn().mockResolvedValue({
+            providerId: 'openai-image',
+            status: 'failed',
+            effectiveParams: {},
+            results: []
+          }),
+          sdWebuiGenerate: vi.fn().mockResolvedValue({
+            providerId: 'sd-webui',
+            status: 'failed',
+            effectiveParams: {},
+            results: []
+          })
+        },
+        system: {
+          clipboardImport: vi.fn().mockResolvedValue(null),
+          openMainWindow: vi.fn(),
+          setLaunchAtLogin: vi.fn(),
+          quitApp: vi.fn(),
+          getFloatingState: vi.fn().mockResolvedValue({
+            x: 960,
+            y: 320,
+            side: 'right',
+            expanded: false
+          }),
+          setFloatingExpanded: vi.fn().mockImplementation(async (expanded: boolean) => ({
+            x: 960,
+            y: 320,
+            side: 'right',
+            expanded
+          })),
+          moveFloatingWindow: vi.fn().mockImplementation(async (input: { x: number; y: number; snap?: boolean }) => ({
+            x: input.x,
+            y: input.y,
+            side: input.x < 720 ? 'left' : 'right',
+            expanded: false
+          })),
+          floatingDragStart: vi.fn().mockResolvedValue({
+            x: 960,
+            y: 320,
+            side: 'right',
+            expanded: false
+          }),
+          floatingDragEnd: vi.fn().mockResolvedValue({
+            x: 960,
+            y: 320,
+            side: 'right',
+            expanded: false
+          }),
+          showFloatingContextMenu: vi.fn().mockResolvedValue(undefined)
+        }
+      }
+    })
+  }
+
+  useAppStore.setState({ currentView: 'library' })
+  useAppStore.setState({ pendingTestBenchPromptId: null })
+  usePromptStore.setState({
+    prompts: [],
+    loading: false,
+    filterTag: null,
+    sortMode: 'default',
+    search: '',
+    selectedPromptId: null
+  })
+  useTestBenchStore.setState({
+    prompts: [],
+    selectedPromptId: null,
+    draftContent: '',
+    results: [],
+    history: [],
+    loading: false,
+    loadingPrompts: false,
+    loadingHistory: false,
+    historyScope: 'current-prompt',
+    saveStatus: 'idle'
+  })
+})
+
+afterEach(() => {
+  vi.clearAllMocks()
+})

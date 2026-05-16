@@ -1,0 +1,216 @@
+import { useEffect, useMemo, useState } from 'react'
+
+import { ImportExportPanel } from '../components/settings/ImportExportPanel'
+import { ProviderSelect } from '../components/settings/ProviderSelect'
+import { SecretField } from '../components/settings/SecretField'
+import { SettingsSection } from '../components/settings/SettingsSection'
+import { AI_PRESETS, findAiPreset } from '../services/ai/presets'
+import { IMAGE_PRESETS, findImagePreset } from '../services/ai/presets'
+
+type SettingsMap = Record<string, unknown>
+
+export function Settings() {
+  const [settings, setSettings] = useState<SettingsMap>({
+    ai_preset: 'openai',
+    ai_base_url: '',
+    ai_model: 'gpt-4.1-mini',
+    image_preset: 'openai-image',
+    image_base_url: '',
+    image_model: 'gpt-image-1',
+    theme_mode: 'system',
+    launch_at_login: false
+  })
+
+  useEffect(() => {
+    void window.promptHub.settings.list().then((value) => {
+      setSettings((current) => ({ ...current, ...value }))
+    })
+  }, [])
+
+  async function updateSetting(key: string, value: unknown) {
+    setSettings((current) => ({ ...current, [key]: value }))
+    await window.promptHub.settings.set(key, value)
+  }
+
+  // 切换 AI 预设：自动把 baseURL / 默认模型回填，自定义预设保留用户已填值
+  async function handleAiPresetChange(presetId: string) {
+    const preset = findAiPreset(presetId)
+    setSettings((current) => ({
+      ...current,
+      ai_preset: presetId,
+      ai_base_url: preset.baseUrlEditable
+        ? String(current.ai_base_url ?? '')
+        : preset.baseURL,
+      ai_model: preset.defaultModel || String(current.ai_model ?? '')
+    }))
+    await window.promptHub.settings.set('ai_preset', presetId)
+    if (!preset.baseUrlEditable) {
+      await window.promptHub.settings.set('ai_base_url', preset.baseURL)
+    }
+    if (preset.defaultModel) {
+      await window.promptHub.settings.set('ai_model', preset.defaultModel)
+    }
+  }
+
+  async function handleImagePresetChange(presetId: string) {
+    const preset = findImagePreset(presetId)
+    setSettings((current) => ({
+      ...current,
+      image_preset: presetId,
+      image_base_url: preset.baseUrlEditable
+        ? String(current.image_base_url ?? '')
+        : preset.baseURL ?? '',
+      image_model: preset.defaultModel || String(current.image_model ?? '')
+    }))
+    await window.promptHub.settings.set('image_preset', presetId)
+    if (preset.baseURL && !preset.baseUrlEditable) {
+      await window.promptHub.settings.set('image_base_url', preset.baseURL)
+    }
+    if (preset.defaultModel) {
+      await window.promptHub.settings.set('image_model', preset.defaultModel)
+    }
+  }
+
+  const aiPresetId = String(settings.ai_preset ?? 'openai')
+  const aiPreset = useMemo(() => findAiPreset(aiPresetId), [aiPresetId])
+  const imagePresetId = String(settings.image_preset ?? 'openai-image')
+  const imagePreset = useMemo(() => findImagePreset(imagePresetId), [imagePresetId])
+
+  const aiBaseUrlPlaceholder = aiPreset.baseURL || 'https://api.example.com/v1'
+  const imageBaseUrlPlaceholder = imagePreset.baseURL || 'https://api.example.com/v1'
+
+  return (
+    <section className="settings-layout">
+      <header className="view-heading">
+        <span className="view-eyebrow">Preferences</span>
+        <div>
+          <h2 className="view-title">设置</h2>
+          <p className="view-description">
+            配置 AI 服务、图像 provider、本地备份和桌面应用行为。
+          </p>
+        </div>
+      </header>
+
+      <SettingsSection
+        title="AI 服务"
+        description="所有厂商都走 OpenAI 兼容协议（baseURL + apiKey + model）。下拉选预设会自动填好 baseURL 和默认模型，也可以选「自定义」接入任意 OpenAI 兼容端点。"
+      >
+        <ProviderSelect
+          label="服务商预设"
+          value={aiPresetId}
+          options={AI_PRESETS.map((preset) => ({ id: preset.id, label: preset.label }))}
+          onChange={(value) => void handleAiPresetChange(value)}
+        />
+        <label className="field">
+          <span className="field-label">API Base URL</span>
+          <input
+            className="field-input"
+            placeholder={aiBaseUrlPlaceholder}
+            disabled={!aiPreset.baseUrlEditable && Boolean(aiPreset.baseURL)}
+            value={String(settings.ai_base_url ?? '')}
+            onChange={(event) => void updateSetting('ai_base_url', event.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span className="field-label">默认模型</span>
+          <input
+            className="field-input"
+            list="ai-model-suggestions"
+            placeholder={aiPreset.defaultModel || '填写模型 ID'}
+            value={String(settings.ai_model ?? '')}
+            onChange={(event) => void updateSetting('ai_model', event.target.value)}
+          />
+          <datalist id="ai-model-suggestions">
+            {aiPreset.suggestedModels.map((model) => (
+              <option key={model} value={model} />
+            ))}
+          </datalist>
+        </label>
+        {aiPreset.note ? <p className="field-hint">{aiPreset.note}</p> : null}
+        <SecretField label="API Key" storageKey="ai.apiKey" actionLabel="保存 API Key" />
+      </SettingsSection>
+
+      <SettingsSection
+        title="图像服务"
+        description="测试台默认走这里选的 provider。OpenAI 系预设与上面 AI 服务共用同一个 API Key（ai.apiKey）。"
+      >
+        <ProviderSelect
+          label="服务商预设"
+          value={imagePresetId}
+          options={IMAGE_PRESETS.map((preset) => ({ id: preset.id, label: preset.label }))}
+          onChange={(value) => void handleImagePresetChange(value)}
+        />
+        {imagePreset.kind === 'openai' ? (
+          <>
+            <label className="field">
+              <span className="field-label">API Base URL</span>
+              <input
+                className="field-input"
+                placeholder={imageBaseUrlPlaceholder}
+                disabled={!imagePreset.baseUrlEditable && Boolean(imagePreset.baseURL)}
+                value={String(settings.image_base_url ?? '')}
+                onChange={(event) => void updateSetting('image_base_url', event.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span className="field-label">图像模型</span>
+              <input
+                className="field-input"
+                list="image-model-suggestions"
+                placeholder={imagePreset.defaultModel || 'gpt-image-1'}
+                value={String(settings.image_model ?? '')}
+                onChange={(event) => void updateSetting('image_model', event.target.value)}
+              />
+              <datalist id="image-model-suggestions">
+                {(imagePreset.suggestedModels ?? []).map((model) => (
+                  <option key={model} value={model} />
+                ))}
+              </datalist>
+            </label>
+          </>
+        ) : null}
+        {imagePreset.kind === 'sd-webui' ? (
+          <label className="field">
+            <span className="field-label">SD WebUI 地址</span>
+            <input
+              className="field-input"
+              placeholder={imagePreset.baseURL || 'http://127.0.0.1:7860'}
+              value={String(settings.image_base_url ?? '')}
+              onChange={(event) => void updateSetting('image_base_url', event.target.value)}
+            />
+          </label>
+        ) : null}
+        {imagePreset.note ? <p className="field-hint">{imagePreset.note}</p> : null}
+      </SettingsSection>
+
+      <SettingsSection title="数据与备份" description="导入导出当前提示词库和非敏感设置。">
+        <ImportExportPanel />
+      </SettingsSection>
+
+      <SettingsSection title="系统与外观" description="控制主题和随系统启动行为。">
+        <ProviderSelect
+          label="主题模式"
+          value={String(settings.theme_mode)}
+          options={[
+            { id: 'light', label: '亮色' },
+            { id: 'dark', label: '暗色' },
+            { id: 'system', label: '跟随系统' }
+          ]}
+          onChange={(value) => void updateSetting('theme_mode', value)}
+        />
+        <label className="settings-toggle">
+          <input
+            checked={Boolean(settings.launch_at_login)}
+            type="checkbox"
+            onChange={(event) => {
+              const checked = event.target.checked
+              void updateSetting('launch_at_login', checked)
+              void window.promptHub.system.setLaunchAtLogin(checked)
+            }}
+          />
+          <span>开机自启</span>
+        </label>
+      </SettingsSection>
+    </section>
+  )
+}
