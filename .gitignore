@@ -5,7 +5,7 @@ node_modules/
 out/
 dist/
 dist-electron/
-build/
+release/
 *.tsbuildinfo
 
 # Local SQLite database (本地用户数据, 不应进仓库)

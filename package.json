@@ -13,7 +13,44 @@
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
     "postinstall": "npm run rebuild:native",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:dir": "npm run build && electron-builder --dir"
+  },
+  "build": {
+    "appId": "art.joeystudio.prompthub",
+    "productName": "Prompt Hub",
+    "copyright": "Copyright © 2026 Joey-233",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "${productName}-${version}-Setup-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Prompt Hub",
+      "deleteAppDataOnUninstall": false
+    }
   },
   "dependencies": {
     "better-sqlite3": "^12.9.0",
@@ -32,6 +69,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^41.2.1",
+    "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
     "jsdom": "^29.0.2",
     "typescript": "^6.0.3",
