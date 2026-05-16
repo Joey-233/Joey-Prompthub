@@ -467,8 +467,8 @@
         <div class="dl-card">
           <div class="os">Win</div>
           <h4>Windows</h4>
-          <div class="sz">.exe · 86.2 MB · x64</div>
-          <button class="dl-btn" onclick="ping(this,'Windows')">免费下载 <span>↓</span></button>
+          <div class="sz">.exe · 103 MB · x64</div>
+          <button class="dl-btn" data-platform="Windows" data-url="/prompthub/download/PromptHub-0.1.0-Setup-x64.exe" onclick="startDownload(this)">免费下载 <span>↓</span></button>
         </div>
         <div class="dl-card">
           <div class="os" style="background:#ece6d5">macOS</div>
@@ -507,6 +507,15 @@
     <details>
       <summary>支持哪些出图服务？<span class="plus">+</span></summary>
       <p>当前支持 Stable Diffusion WebUI 与 OpenAI DALL·E 3，后续将通过自定义 provider 接入更多服务。</p>
+    </details>
+    <details>
+      <summary>遇到问题、想反馈 bug 或建议怎么联系？<span class="plus">+</span></summary>
+      <p>
+        欢迎随时联系作者 Joey：<br>
+        · 微信：<b>15618674980</b>（请备注「Prompt Hub」）<br>
+        · 邮箱：<a href="mailto:15618674980@163.com">15618674980@163.com</a><br>
+        · GitHub Issues：<a href="https://github.com/Joey-233/PromptHub/issues" target="_blank" rel="noopener noreferrer">github.com/Joey-233/PromptHub/issues</a>
+      </p>
     </details>
   </section>
 
@@ -649,6 +658,80 @@ function ping(btn,name){
   };
   window.__phToast(messages[name] || '即将上线，敬请期待');
 }
+
+/* ===== Download with 30s per-platform cooldown ===== */
+const DOWNLOAD_COOLDOWN_MS = 30000;
+const DOWNLOAD_STORAGE_KEY = 'ph_dl_cooldown';
+
+function readCooldownMap() {
+  try { return JSON.parse(localStorage.getItem(DOWNLOAD_STORAGE_KEY) || '{}'); }
+  catch { return {}; }
+}
+
+function writeCooldownMap(map) {
+  try { localStorage.setItem(DOWNLOAD_STORAGE_KEY, JSON.stringify(map)); } catch {}
+}
+
+function applyCooldownUI(btn, remainingMs) {
+  const original = btn.dataset.originalLabel || btn.innerHTML;
+  btn.dataset.originalLabel = original;
+  btn.disabled = true;
+  btn.style.opacity = '0.55';
+  btn.style.cursor = 'not-allowed';
+  let secs = Math.ceil(remainingMs / 1000);
+  btn.innerHTML = `冷却中 ${secs}s`;
+  const timer = setInterval(() => {
+    secs -= 1;
+    if (secs <= 0) {
+      clearInterval(timer);
+      btn.innerHTML = original;
+      btn.disabled = false;
+      btn.style.opacity = '';
+      btn.style.cursor = '';
+    } else {
+      btn.innerHTML = `冷却中 ${secs}s`;
+    }
+  }, 1000);
+}
+
+function startDownload(btn) {
+  const name = btn.dataset.platform || 'Download';
+  const url = btn.dataset.url;
+  if (!url) {
+    window.__phToast('下载链接配置错误');
+    return;
+  }
+  const map = readCooldownMap();
+  const now = Date.now();
+  const last = map[name] || 0;
+  const remainingMs = DOWNLOAD_COOLDOWN_MS - (now - last);
+  if (remainingMs > 0) {
+    const secs = Math.ceil(remainingMs / 1000);
+    window.__phToast(`<b>${name}</b> 下载冷却中，剩 ${secs}s 后再试 ☕`);
+    return;
+  }
+  map[name] = now;
+  writeCooldownMap(map);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  window.__phToast(`<b>${name}</b> 下载已开始 ✓ 请到浏览器下载列表查看`);
+  applyCooldownUI(btn, DOWNLOAD_COOLDOWN_MS);
+}
+
+/* 页面加载时若 localStorage 里还有未过期的冷却，恢复 UI 状态 */
+document.querySelectorAll('button[data-platform][data-url]').forEach((btn) => {
+  const name = btn.dataset.platform;
+  const map = readCooldownMap();
+  const last = map[name] || 0;
+  const remainingMs = DOWNLOAD_COOLDOWN_MS - (Date.now() - last);
+  if (remainingMs > 0) applyCooldownUI(btn, remainingMs);
+});
 </script>
 </body>
 </html>
