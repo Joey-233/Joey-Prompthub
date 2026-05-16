@@ -32,6 +32,15 @@ export function AppFrame({ children }: { children: ReactNode }) {
           </nav>
         </header>
         {children}
+        <a
+          aria-label="访问 joeystudio.art"
+          className="app-watermark"
+          href="https://joeystudio.art"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          joeystudio.art 出品
+        </a>
       </div>
     </main>
   )
