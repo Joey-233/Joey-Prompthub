@@ -127,6 +127,12 @@ export function Settings() {
           </datalist>
         </label>
         {aiPreset.note ? <p className="field-hint">{aiPreset.note}</p> : null}
+        <p className="field-hint">
+          保存后将用于：<b>{aiPreset.label}</b> · 模型{' '}
+          <code>
+            {String(settings.ai_model ?? '').trim() || aiPreset.defaultModel || '未填写'}
+          </code>
+        </p>
         <SecretField label="API Key" storageKey="ai.apiKey" actionLabel="保存 API Key" />
       </SettingsSection>
 

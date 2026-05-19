@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 export function SecretField({
   label,
@@ -11,11 +11,16 @@ export function SecretField({
 }) {
   const [value, setValue] = useState('')
   const [status, setStatus] = useState('未配置')
+  const [justSaved, setJustSaved] = useState(false)
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     void window.promptHub.secure.has(storageKey).then((hasValue) => {
-      setStatus(hasValue ? '已配置' : '未配置')
+      setStatus(hasValue ? '已加密保存' : '未配置')
     })
+    return () => {
+      if (feedbackTimer.current) clearTimeout(feedbackTimer.current)
+    }
   }, [storageKey])
 
   async function handleSave() {
@@ -25,7 +30,17 @@ export function SecretField({
 
     await window.promptHub.secure.set(storageKey, value.trim())
     setValue('')
-    setStatus('已配置')
+    setStatus('已加密保存')
+    setJustSaved(true)
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current)
+    feedbackTimer.current = setTimeout(() => setJustSaved(false), 3000)
+  }
+
+  async function handleClear() {
+    await window.promptHub.secure.delete(storageKey)
+    setValue('')
+    setStatus('未配置')
+    setJustSaved(false)
   }
 
   return (
@@ -42,7 +57,18 @@ export function SecretField({
         />
       </label>
       <div className="secret-actions">
-        <span className="secret-status">{status}</span>
+        <span className="secret-status" data-state={status === '已加密保存' ? 'set' : 'unset'}>
+          {justSaved ? '✓ 已加密保存到本地' : status}
+        </span>
+        {status === '已加密保存' ? (
+          <button
+            className="editor-action editor-action-danger"
+            type="button"
+            onClick={() => void handleClear()}
+          >
+            清除
+          </button>
+        ) : null}
         <button className="editor-action" type="button" onClick={() => void handleSave()}>
           {actionLabel}
         </button>
