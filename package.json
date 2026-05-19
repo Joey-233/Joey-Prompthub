@@ -36,7 +36,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "${productName}-${version}-Setup-${arch}.${ext}"
@@ -72,6 +74,7 @@
     "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
     "jsdom": "^29.0.2",
+    "png-to-ico": "^3.0.1",
     "typescript": "^6.0.3",
     "vite": "^7.3.2",
     "vitest": "^4.1.4"
