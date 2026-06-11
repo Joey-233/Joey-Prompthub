@@ -21,6 +21,8 @@ export interface PromptRecord {
   notes: string
   tags: string[]
   params: Record<string, unknown>
+  /** 自定义预览图，data URL（`data:image/jpeg;base64,...`）。空串 = 未设置。 */
+  previewImage?: string
   isFavorite: boolean
   lastUsedAt: string | null
   lastGeneratedAt: string | null
@@ -35,6 +37,7 @@ export interface CreatePromptInput {
   notes?: string
   tags?: string[]
   params?: Record<string, unknown>
+  previewImage?: string
   isFavorite?: boolean
   lastUsedAt?: string | null
   lastGeneratedAt?: string | null
@@ -47,6 +50,8 @@ export interface UpdatePromptInput {
   notes?: string
   tags?: string[]
   params?: Record<string, unknown>
+  /** 传空串清除预览图。 */
+  previewImage?: string
   isFavorite?: boolean
   lastUsedAt?: string | null
   lastGeneratedAt?: string | null
@@ -109,6 +114,14 @@ export interface AiOptimizeBridgeInput {
   model?: string
 }
 
+export interface AiDescribeImageInput {
+  /** 图片 data URL（`data:image/...;base64,xxx`），由渲染层压缩后传入。 */
+  imageDataUrl: string
+  /** 识别指令；缺省时主进程使用默认的「反推绘图提示词」指令。 */
+  instruction?: string
+  model?: string
+}
+
 export interface PromptHubApi {
   prompts: {
     list: (filter?: PromptFilter) => Promise<PromptRecord[]>
@@ -132,6 +145,7 @@ export interface PromptHubApi {
   }
   ai: {
     optimize: (input: AiOptimizeBridgeInput) => Promise<string>
+    describeImage: (input: AiDescribeImageInput) => Promise<string>
   }
   image: {
     openaiGenerate: (input: ImageGenerationInput) => Promise<ImageGenerationOutcome>

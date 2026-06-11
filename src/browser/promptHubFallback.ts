@@ -83,7 +83,7 @@ function createTitle(content: string) {
 
 function normalizePrompt(prompt: PromptRecord): PromptRecord {
   // Localstorage entries from previous app versions may lack newer fields.
-  return { ...prompt, notes: prompt.notes ?? '' }
+  return { ...prompt, notes: prompt.notes ?? '', previewImage: prompt.previewImage ?? '' }
 }
 
 function sortPromptsByUpdatedAt(prompts: PromptRecord[]) {
@@ -141,6 +141,7 @@ function createPromptHubFallback(): PromptHubApi {
           notes: input.notes ?? '',
           tags: [...(input.tags ?? [])],
           params: cloneValue(input.params ?? {}),
+          previewImage: input.previewImage ?? '',
           isFavorite: input.isFavorite ?? false,
           lastUsedAt: input.lastUsedAt ?? null,
           lastGeneratedAt: input.lastGeneratedAt ?? null,
@@ -238,6 +239,9 @@ function createPromptHubFallback(): PromptHubApi {
     ai: {
       async optimize() {
         throw new Error('当前为浏览器演示模式，AI 优化需要在桌面应用内使用')
+      },
+      async describeImage() {
+        throw new Error('当前为浏览器演示模式，识图需要在桌面应用内使用')
       }
     },
     image: {

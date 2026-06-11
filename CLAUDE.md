@@ -21,6 +21,7 @@
 
 - 悬浮球和主面板是两个独立的 BrowserWindow，共享主进程中的 db.ts
 - 所有数据库操作在主进程，渲染进程通过 preload.ts 暴露的 IPC bridge 调用
+- **所有第三方 HTTP（AI 优化 / 识图 / 出图）都在主进程 electron/aiCalls.ts 发起**——绕开渲染进程 CORS，apiKey 不跨 IPC 暴露；渲染层 services/ 只是 IPC 转发器
 - 悬浮球窗口：frame:false, transparent:true, alwaysOnTop:true, skipTaskbar:true
 - 关闭主面板只隐藏窗口，右键悬浮球「退出」才真正退出
 
@@ -32,19 +33,22 @@ electron/floatingBall.ts    悬浮球窗口
 electron/mainWindow.ts      主面板窗口
 electron/preload.ts         IPC bridge
 electron/db.ts              SQLite CRUD
+electron/aiCalls.ts         第三方 API 调用（chat/completions、多模态识图、图像生成、SD WebUI）
+electron/secretStore.ts     safeStorage 加密存储
+electron/ipc/registerIpc.ts IPC handler 注册
 src/App.tsx                 主面板根组件
-src/floating/FloatingBall.tsx  悬浮球 UI
-src/views/Library.tsx       提示词库视图
-src/views/TestBench.tsx     测试台视图
-src/components/             UI 组件
-src/services/ai.ts          AI 优化调用
-src/services/imageGen.ts    出图 adapter（预留）
-src/stores/store.ts         Zustand store
+src/floating/FloatingBallApp.tsx  悬浮球 UI
+src/views/                  Library / TestBench / Settings 三大视图
+src/components/library/     卡片、编辑器、快速录入、AI 优化、识图对话框
+src/services/ai/            预设清单 + IPC 转发（优化 / 识图）
+src/services/image/         图像 provider（capabilities + IPC 转发）
+src/lib/imageFile.ts        图片文件读取 + canvas 压缩（识图与预览图共用）
+src/stores/                 Zustand store
 ```
 
 ## 数据模型
 
-prompts 表：id, title, content, notes, tags(JSON), params(JSON), is_favorite, last_used_at, last_generated_at, use_count, created_at, updated_at
+prompts 表：id, title, content, notes, tags(JSON), params(JSON), preview_image(data URL 自定义预览图), is_favorite, last_used_at, last_generated_at, use_count, created_at, updated_at
 generations 表：id, prompt_id, provider_id, status, prompt_title_snapshot, prompt_snapshot, image_data, params(JSON), created_at
 
 - 提示词分类合并到 tags：`'绘图'` 和 `'LLM'` 是两个保留 tag 值（src/shared/types.ts 的 IMAGE_TAG / LLM_TAG），UI 把它们当作首要类型 chip 来显示和筛选；TestBench 只列含 `'绘图'` tag 的提示词
@@ -54,8 +58,10 @@ generations 表：id, prompt_id, provider_id, status, prompt_title_snapshot, pro
 
 ```bash
 npm run dev          # 开发模式
-npm run build        # 构建
+npm run build        # 构建（先 typecheck）
 npm run preview      # 预览构建产物
+npm test             # vitest 全量测试
+npm run dist:win     # 打 Windows NSIS 安装包到 release/
 ```
 
 ## 注意事项

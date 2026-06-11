@@ -19,6 +19,7 @@ type SqlPromptRow = {
   notes: string
   tags: string
   params: string
+  preview_image: string
   is_favorite: number
   last_used_at: string | null
   last_generated_at: string | null
@@ -124,6 +125,7 @@ function mapPromptRow(row: SqlPromptRow): PromptRecord {
     notes: row.notes ?? '',
     tags: deserializeJson(row.tags, [] as string[]),
     params: deserializeJson(row.params, {} as Record<string, unknown>),
+    previewImage: row.preview_image ?? '',
     isFavorite: Boolean(row.is_favorite),
     lastUsedAt: row.last_used_at ?? null,
     lastGeneratedAt: row.last_generated_at ?? null,
@@ -159,6 +161,7 @@ export function createPromptDatabase(databasePath: string) {
       notes TEXT NOT NULL DEFAULT '',
       tags TEXT NOT NULL DEFAULT '[]',
       params TEXT NOT NULL DEFAULT '{}',
+      preview_image TEXT NOT NULL DEFAULT '',
       is_favorite INTEGER NOT NULL DEFAULT 0,
       last_used_at TEXT,
       last_generated_at TEXT,
@@ -198,6 +201,7 @@ export function createPromptDatabase(databasePath: string) {
   ensureColumn(database, 'prompts', 'last_generated_at', 'TEXT')
   ensureColumn(database, 'prompts', 'use_count', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn(database, 'prompts', 'notes', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(database, 'prompts', 'preview_image', "TEXT NOT NULL DEFAULT ''")
   ensureColumn(database, 'generations', 'prompt_title_snapshot', "TEXT NOT NULL DEFAULT ''")
 
   migrateTypeToTags(database)
@@ -210,6 +214,7 @@ export function createPromptDatabase(databasePath: string) {
       notes,
       tags,
       params,
+      preview_image,
       is_favorite,
       last_used_at,
       last_generated_at,
@@ -222,6 +227,7 @@ export function createPromptDatabase(databasePath: string) {
       @notes,
       @tags,
       @params,
+      @previewImage,
       @isFavorite,
       @lastUsedAt,
       @lastGeneratedAt,
@@ -236,6 +242,7 @@ export function createPromptDatabase(databasePath: string) {
       notes,
       tags,
       params,
+      preview_image,
       is_favorite,
       last_used_at,
       last_generated_at,
@@ -257,6 +264,7 @@ export function createPromptDatabase(databasePath: string) {
       notes = @notes,
       tags = @tags,
       params = @params,
+      preview_image = @previewImage,
       is_favorite = @isFavorite,
       last_used_at = @lastUsedAt,
       last_generated_at = @lastGeneratedAt,
@@ -337,6 +345,7 @@ export function createPromptDatabase(databasePath: string) {
           notes: input.notes ?? '',
           tags: serializeJson(input.tags ?? []),
           params: serializeJson(input.params ?? {}),
+          previewImage: input.previewImage ?? '',
           isFavorite: input.isFavorite ? 1 : 0,
           lastUsedAt: input.lastUsedAt ?? null,
           lastGeneratedAt: input.lastGeneratedAt ?? null,
@@ -361,6 +370,10 @@ export function createPromptDatabase(databasePath: string) {
           params: serializeJson(
             patch.params ?? deserializeJson(current.params, {} as Record<string, unknown>)
           ),
+          previewImage:
+            patch.previewImage === undefined
+              ? current.preview_image ?? ''
+              : patch.previewImage,
           isFavorite:
             patch.isFavorite === undefined
               ? current.is_favorite

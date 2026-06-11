@@ -2,6 +2,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+// jsdom 没有 canvas，mock 图片压缩工具
+vi.mock('../../lib/imageFile', () => ({
+  readImageFileAsDataUrl: vi.fn().mockResolvedValue('data:image/jpeg;base64,RESIZED')
+}))
+
 import type { PromptRecord } from '../../shared/types'
 import { PromptEditor } from './PromptEditor'
 
@@ -58,6 +63,60 @@ describe('PromptEditor', () => {
     unmount()
 
     expect(updatePrompt).not.toHaveBeenCalled()
+  })
+
+  it('uploads a preview image and saves it through the debounced draft', async () => {
+    const updatePrompt = vi.fn().mockResolvedValue({
+      ...prompt,
+      previewImage: 'data:image/jpeg;base64,RESIZED'
+    })
+    window.promptHub.prompts.update = updatePrompt
+
+    render(<PromptEditor prompt={prompt} />)
+
+    const file = new File(['img'], 'preview.png', { type: 'image/png' })
+    fireEvent.change(screen.getByLabelText('上传预览图文件'), {
+      target: { files: [file] }
+    })
+
+    // 读图是异步 mock，先等预览渲染出来
+    await waitFor(() => {
+      expect(screen.getByAltText('提示词预览图')).toBeInTheDocument()
+    })
+
+    // 真实跑完 800ms debounce 自动保存
+    await waitFor(
+      () => {
+        expect(updatePrompt).toHaveBeenCalledWith(
+          'image-1',
+          expect.objectContaining({ previewImage: 'data:image/jpeg;base64,RESIZED' })
+        )
+      },
+      { timeout: 2000 }
+    )
+  })
+
+  it('removes an existing preview image with an empty-string patch', async () => {
+    vi.useFakeTimers()
+    const promptWithPreview: PromptRecord = {
+      ...prompt,
+      previewImage: 'data:image/jpeg;base64,OLD'
+    }
+    const updatePrompt = vi.fn().mockResolvedValue({ ...promptWithPreview, previewImage: '' })
+    window.promptHub.prompts.update = updatePrompt
+
+    render(<PromptEditor prompt={promptWithPreview} />)
+
+    expect(screen.getByAltText('提示词预览图')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '移除预览图' }))
+    await vi.advanceTimersByTimeAsync(900)
+
+    expect(updatePrompt).toHaveBeenCalledWith(
+      'image-1',
+      expect.objectContaining({ previewImage: '' })
+    )
+
+    vi.useRealTimers()
   })
 
   it('toggles favorite state for the selected prompt', async () => {

@@ -10,6 +10,7 @@ interface LegacyExportedPrompt {
   notes?: string
   tags?: string[]
   params?: Record<string, unknown>
+  previewImage?: string
   isFavorite?: boolean
   lastUsedAt?: string | null
   lastGeneratedAt?: string | null
@@ -59,6 +60,7 @@ export function ImportExportPanel() {
         notes: prompt.notes,
         tags,
         params: prompt.params,
+        previewImage: prompt.previewImage,
         isFavorite: prompt.isFavorite,
         lastUsedAt: prompt.lastUsedAt,
         lastGeneratedAt: prompt.lastGeneratedAt,

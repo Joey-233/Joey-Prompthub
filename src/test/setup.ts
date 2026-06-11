@@ -33,7 +33,8 @@ beforeEach(() => {
           reveal: vi.fn().mockResolvedValue(null)
         },
         ai: {
-          optimize: vi.fn().mockResolvedValue('')
+          optimize: vi.fn().mockResolvedValue(''),
+          describeImage: vi.fn().mockResolvedValue('')
         },
         image: {
           openaiGenerate: vi.fn().mockResolvedValue({

@@ -42,6 +42,13 @@ export function PromptCard({
       >
         {prompt.isFavorite ? '★' : '☆'}
       </button>
+      {prompt.previewImage ? (
+        <img
+          alt={`${prompt.title} 预览图`}
+          className="prompt-card-preview"
+          src={prompt.previewImage}
+        />
+      ) : null}
       <p className="prompt-card-content">{prompt.content}</p>
       <div className="prompt-card-footer">
         {prompt.tags.length > 0 && (

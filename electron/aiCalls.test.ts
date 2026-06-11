@@ -11,7 +11,7 @@ vi.mock('./secretStore', () => ({
   }
 }))
 
-import { callAiOptimize, callOpenaiImage, callSdWebui } from './aiCalls'
+import { callAiOptimize, callAiVision, callOpenaiImage, callSdWebui } from './aiCalls'
 import { secretStore } from './secretStore'
 
 type FakeDb = Parameters<typeof callAiOptimize>[0]
@@ -195,6 +195,73 @@ describe('callAiOptimize', () => {
     })
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
     expect(body.messages[1].content).toContain(longContent)
+  })
+})
+
+describe('callAiVision', () => {
+  const IMAGE = 'data:image/jpeg;base64,FAKEIMG'
+
+  it('rejects non-image data URLs before any network call', async () => {
+    await expect(
+      callAiVision(makeDb({ ai_preset: 'openai' }), { imageDataUrl: 'not-a-data-url' })
+    ).rejects.toThrow(/图片数据格式不正确/)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('throws when API key is missing', async () => {
+    vi.mocked(secretStore.reveal).mockReturnValue(null)
+    await expect(
+      callAiVision(makeDb({}), { imageDataUrl: IMAGE })
+    ).rejects.toThrow(/API Key/)
+  })
+
+  it('sends an OpenAI-compatible multimodal payload with the image as image_url', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'a neon street at night' } }] })
+    })
+
+    const result = await callAiVision(makeDb({ ai_preset: 'openai' }), {
+      imageDataUrl: IMAGE
+    })
+
+    expect(result).toBe('a neon street at night')
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.openai.com/v1/chat/completions')
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    const userContent = body.messages[1].content
+    expect(Array.isArray(userContent)).toBe(true)
+    expect(userContent[0].type).toBe('text')
+    expect(userContent[0].text).toContain('反推')
+    expect(userContent[1]).toEqual({ type: 'image_url', image_url: { url: IMAGE } })
+  })
+
+  it('uses caller-provided instruction and model override verbatim', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'ok' } }] })
+    })
+
+    await callAiVision(makeDb({ ai_preset: 'qwen', ai_model: 'qwen-plus' }), {
+      imageDataUrl: IMAGE,
+      instruction: '用英文描述这张图',
+      model: 'qwen-vl-plus'
+    })
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.model).toBe('qwen-vl-plus')
+    expect(body.messages[1].content[0].text).toBe('用英文描述这张图')
+  })
+
+  it('surfaces HTTP errors so the UI can hint about vision-capable models', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => 'model does not support image input'
+    })
+
+    await expect(
+      callAiVision(makeDb({ ai_preset: 'deepseek' }), { imageDataUrl: IMAGE })
+    ).rejects.toThrow(/400.*image input/)
   })
 })
 

@@ -2,6 +2,7 @@ import { FormEvent, KeyboardEvent as ReactKeyboardEvent, useMemo, useState } fro
 
 import { IMAGE_TAG, LLM_TAG, TYPE_TAGS } from '../../shared/types'
 import { usePromptStore } from '../../stores/promptStore'
+import { RecognizeImageDialog } from './RecognizeImageDialog'
 
 const MAX_SUGGESTIONS = 8
 
@@ -30,6 +31,7 @@ export function QuickCapture() {
   const [content, setContent] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [tagDraft, setTagDraft] = useState('')
+  const [showRecognizeDialog, setShowRecognizeDialog] = useState(false)
 
   const userTags = useMemo(
     () => tags.filter((tag) => !TYPE_TAGS.includes(tag as (typeof TYPE_TAGS)[number])),
@@ -172,10 +174,34 @@ export function QuickCapture() {
           </div>
         )}
 
+        <button
+          className="capture-recognize"
+          type="button"
+          onClick={() => setShowRecognizeDialog(true)}
+        >
+          识图
+        </button>
+
         <button className="capture-save" type="submit">
           保存
         </button>
       </div>
+
+      {showRecognizeDialog ? (
+        <RecognizeImageDialog
+          onClose={() => setShowRecognizeDialog(false)}
+          onAccept={(value) => {
+            setContent(value)
+            // 识图产出基本都是绘图提示词，自动补上 绘图 类型标签
+            setTags((current) =>
+              current.includes(IMAGE_TAG)
+                ? current
+                : [IMAGE_TAG, ...current.filter((tag) => tag !== LLM_TAG)]
+            )
+            setShowRecognizeDialog(false)
+          }}
+        />
+      ) : null}
     </form>
   )
 }

@@ -24,7 +24,8 @@ const api: PromptHubApi = {
     reveal: (key) => ipcRenderer.invoke('secure:reveal', key)
   },
   ai: {
-    optimize: (input) => ipcRenderer.invoke('ai:optimize', input)
+    optimize: (input) => ipcRenderer.invoke('ai:optimize', input),
+    describeImage: (input) => ipcRenderer.invoke('ai:describeImage', input)
   },
   image: {
     openaiGenerate: (input) => ipcRenderer.invoke('image:openaiGenerate', input),

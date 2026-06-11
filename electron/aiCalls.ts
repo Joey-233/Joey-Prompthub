@@ -1,14 +1,19 @@
 /**
  * 所有第三方 HTTP 调用都在主进程发起，避开渲染进程的 CORS 限制。
- * 这里实现三类调用：
- *   - chat.completions 兼容（用于 AI 优化）
+ * 这里实现四类调用：
+ *   - chat.completions 兼容（AI 优化）
+ *   - chat.completions 多模态（识图反推提示词）
  *   - OpenAI 兼容图像生成
  *   - Stable Diffusion WebUI txt2img
  *
- * API Key 直接在主进程从 secretStore 读取，不再跨 IPC 暴露到渲染进程。
+ * API Key 直接在主进程从 secretStore 读取，不跨 IPC 暴露到渲染进程。
  */
 
 import { findAiPreset, findImagePreset } from '../src/services/ai/presets'
+import type {
+  AiDescribeImageInput,
+  AiOptimizeBridgeInput
+} from '../src/shared/types'
 import type {
   ImageGenerationInput,
   ImageGenerationOutcome
@@ -16,31 +21,26 @@ import type {
 import type { PromptDatabase } from './db'
 import { secretStore } from './secretStore'
 
-export interface AiOptimizeInput {
-  content: string
-  direction: string
-  customInstruction?: string
-  model?: string
-}
-
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '')
 }
 
-function directionInstruction(input: AiOptimizeInput): string {
-  if (input.direction === '自定义指令') {
-    return input.customInstruction?.trim() || '请优化这个提示词的表达质量。'
-  }
-  if (input.direction === '精简表达') {
-    return '请保留原始意图，去掉冗余表达，让提示词更清晰、更简洁。'
-  }
-  return '请保留原始意图，增强画面细节、风格描述和执行稳定性。'
+/* ===================== chat.completions 公共部分 ===================== */
+
+interface ResolvedAiEndpoint {
+  apiKey: string
+  baseURL: string
+  model: string
 }
 
-export async function callAiOptimize(
+/**
+ * 从 settings + secretStore 解析出文本 AI 的调用三元组。
+ * 任何缺项都抛带预设名的中文错误，UI 直接展示。
+ */
+function resolveAiEndpoint(
   database: PromptDatabase,
-  input: AiOptimizeInput
-): Promise<string> {
+  modelOverride?: string
+): ResolvedAiEndpoint {
   const settings = database.settings.list()
   const presetId = String(settings.ai_preset ?? 'openai')
   const preset = findAiPreset(presetId)
@@ -49,7 +49,7 @@ export async function callAiOptimize(
     String(settings.ai_base_url ?? '').trim() || preset.baseURL
   )
   const model =
-    input.model ||
+    modelOverride ||
     String(settings.ai_model ?? '').trim() ||
     preset.defaultModel ||
     'gpt-4.1-mini'
@@ -59,26 +59,32 @@ export async function callAiOptimize(
   if (!baseURL) throw new Error('请在设置页填写自定义 baseURL，或选择内置预设')
   if (!model) throw new Error('请在设置页填写默认模型名')
 
-  const response = await fetch(`${baseURL}/chat/completions`, {
+  return { apiKey, baseURL, model }
+}
+
+type ChatMessageContent =
+  | string
+  | Array<
+      | { type: 'text'; text: string }
+      | { type: 'image_url'; image_url: { url: string } }
+    >
+
+interface ChatMessage {
+  role: 'system' | 'user' | 'assistant'
+  content: ChatMessageContent
+}
+
+async function postChatCompletions(
+  endpoint: ResolvedAiEndpoint,
+  messages: ChatMessage[]
+): Promise<string> {
+  const response = await fetch(`${endpoint.baseURL}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`
+      Authorization: `Bearer ${endpoint.apiKey}`
     },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: 'system',
-          content:
-            '你是提示词优化助手。只返回优化后的最终提示词，不要加解释，不要加标题。'
-        },
-        {
-          role: 'user',
-          content: `优化方向：${directionInstruction(input)}\n\n原始提示词：\n${input.content}`
-        }
-      ]
-    })
+    body: JSON.stringify({ model: endpoint.model, messages })
   })
 
   if (!response.ok) {
@@ -91,6 +97,69 @@ export async function callAiOptimize(
   }
   return data.choices?.[0]?.message?.content?.trim() ?? ''
 }
+
+/* ===================== AI 优化 ===================== */
+
+function directionInstruction(input: AiOptimizeBridgeInput): string {
+  if (input.direction === '自定义指令') {
+    return input.customInstruction?.trim() || '请优化这个提示词的表达质量。'
+  }
+  if (input.direction === '精简表达') {
+    return '请保留原始意图，去掉冗余表达，让提示词更清晰、更简洁。'
+  }
+  return '请保留原始意图，增强画面细节、风格描述和执行稳定性。'
+}
+
+export async function callAiOptimize(
+  database: PromptDatabase,
+  input: AiOptimizeBridgeInput
+): Promise<string> {
+  const endpoint = resolveAiEndpoint(database, input.model)
+
+  return postChatCompletions(endpoint, [
+    {
+      role: 'system',
+      content: '你是提示词优化助手。只返回优化后的最终提示词，不要加解释，不要加标题。'
+    },
+    {
+      role: 'user',
+      content: `优化方向：${directionInstruction(input)}\n\n原始提示词：\n${input.content}`
+    }
+  ])
+}
+
+/* ===================== 识图（多模态） ===================== */
+
+const DEFAULT_VISION_INSTRUCTION =
+  '仔细观察这张图片，反推出一段可用于 AI 绘图、能复现画面主体、构图、风格、光线和质感的中文提示词。只返回提示词本身，不要任何解释。'
+
+export async function callAiVision(
+  database: PromptDatabase,
+  input: AiDescribeImageInput
+): Promise<string> {
+  if (!input.imageDataUrl?.startsWith('data:image/')) {
+    throw new Error('图片数据格式不正确，请重新选择图片')
+  }
+
+  const endpoint = resolveAiEndpoint(database, input.model)
+  const instruction = input.instruction?.trim() || DEFAULT_VISION_INSTRUCTION
+
+  return postChatCompletions(endpoint, [
+    {
+      role: 'system',
+      content: '你是图像理解与提示词反推助手。'
+    },
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: instruction },
+        { type: 'image_url', image_url: { url: input.imageDataUrl } }
+      ]
+    }
+  ])
+}
+
+/* ===================== OpenAI 兼容图像生成 ===================== */
 
 const DALLE3_SIZES = [
   { width: 1024, height: 1024 },
@@ -202,6 +271,8 @@ export async function callOpenaiImage(
     results
   }
 }
+
+/* ===================== SD WebUI ===================== */
 
 export async function callSdWebui(
   database: PromptDatabase,

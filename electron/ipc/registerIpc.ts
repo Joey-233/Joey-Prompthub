@@ -1,7 +1,7 @@
 import { clipboard, ipcMain } from 'electron'
 
 import { IMAGE_TAG, type CreatePromptInput } from '../../src/shared/types'
-import { callAiOptimize, callOpenaiImage, callSdWebui } from '../aiCalls'
+import { callAiOptimize, callAiVision, callOpenaiImage, callSdWebui } from '../aiCalls'
 import type { PromptDatabase } from '../db'
 import type { FloatingBallController } from '../floatingBall'
 import { secretStore } from '../secretStore'
@@ -36,6 +36,7 @@ export function registerIpc(
   })
 
   ipcMain.handle('ai:optimize', (_event, input) => callAiOptimize(database, input))
+  ipcMain.handle('ai:describeImage', (_event, input) => callAiVision(database, input))
   ipcMain.handle('image:openaiGenerate', (_event, input) => callOpenaiImage(database, input))
   ipcMain.handle('image:sdWebuiGenerate', (_event, input) => callSdWebui(database, input))
 

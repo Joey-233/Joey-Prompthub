@@ -62,7 +62,8 @@ describe('Library', () => {
           reveal: vi.fn()
         },
         ai: {
-          optimize: vi.fn().mockResolvedValue('')
+          optimize: vi.fn().mockResolvedValue(''),
+          describeImage: vi.fn().mockResolvedValue('')
         },
         image: {
           openaiGenerate: vi.fn().mockResolvedValue({

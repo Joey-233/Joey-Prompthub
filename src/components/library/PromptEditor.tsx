@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 
 import { IMAGE_TAG, type PromptRecord } from '../../shared/types'
 import { useDebouncedEffect } from '../../hooks/useDebouncedEffect'
+import { readImageFileAsDataUrl } from '../../lib/imageFile'
 import { buildUsagePatch } from '../../shared/promptActivity'
 import { useAppStore } from '../../stores/appStore'
 import { usePromptStore } from '../../stores/promptStore'
@@ -12,7 +13,8 @@ function buildDraftPatch(draft: PromptRecord) {
     content: draft.content,
     notes: draft.notes,
     tags: draft.tags,
-    params: draft.params
+    params: draft.params,
+    previewImage: draft.previewImage ?? ''
   }
 }
 
@@ -20,6 +22,7 @@ function hasDraftChanges(draft: PromptRecord, source: PromptRecord) {
   return (
     draft.content !== source.content ||
     draft.notes !== source.notes ||
+    (draft.previewImage ?? '') !== (source.previewImage ?? '') ||
     JSON.stringify(draft.tags) !== JSON.stringify(source.tags) ||
     JSON.stringify(draft.params) !== JSON.stringify(source.params)
   )
@@ -33,6 +36,8 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
   const [draft, setDraft] = useState(prompt)
   const [showOptimizeDialog, setShowOptimizeDialog] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [previewError, setPreviewError] = useState('')
+  const previewInputRef = useRef<HTMLInputElement | null>(null)
 
   // Tags are stored as string[] in the data model, but the editor input is a
   // single comma-separated string. We keep the raw text in local state so the
@@ -60,7 +65,30 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
     setDraft(prompt)
     setTagsInput(prompt.tags.join(', '))
     setConfirmDelete(false)
+    setPreviewError('')
   }, [prompt])
+
+  async function handlePreviewFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) {
+      return
+    }
+
+    setPreviewError('')
+    try {
+      // 压到 512px JPEG 再进 SQLite，控制行体积，列表加载不被拖慢
+      const dataUrl = await readImageFileAsDataUrl(file, {
+        maxDimension: 512,
+        quality: 0.8
+      })
+      setDraft((current) => ({ ...current, previewImage: dataUrl }))
+    } catch (caughtError) {
+      setPreviewError(
+        caughtError instanceof Error ? caughtError.message : '预览图读取失败'
+      )
+    }
+  }
 
   useDebouncedEffect(
     () => {
@@ -118,6 +146,54 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
             }
           />
         </label>
+
+        <div className="field">
+          <span className="field-label">预览图</span>
+          {draft.previewImage ? (
+            <div className="editor-preview">
+              <img
+                alt="提示词预览图"
+                className="editor-preview-image"
+                src={draft.previewImage}
+              />
+              <div className="editor-preview-actions">
+                <button
+                  className="editor-action"
+                  type="button"
+                  onClick={() => previewInputRef.current?.click()}
+                >
+                  更换预览图
+                </button>
+                <button
+                  className="editor-action editor-action-danger"
+                  type="button"
+                  onClick={() =>
+                    setDraft((current) => ({ ...current, previewImage: '' }))
+                  }
+                >
+                  移除预览图
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="editor-action editor-preview-upload"
+              type="button"
+              onClick={() => previewInputRef.current?.click()}
+            >
+              上传预览图
+            </button>
+          )}
+          <input
+            ref={previewInputRef}
+            hidden
+            accept="image/*"
+            aria-label="上传预览图文件"
+            type="file"
+            onChange={(event) => void handlePreviewFileChange(event)}
+          />
+          {previewError ? <p className="field-hint field-hint-error">{previewError}</p> : null}
+        </div>
       </div>
 
       <div className="editor-actions">

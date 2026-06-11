@@ -10,6 +10,7 @@ vi.mock('better-sqlite3', () => {
     notes: string
     tags: string
     params: string
+    preview_image: string
     is_favorite: number
     last_used_at: string | null
     last_generated_at: string | null
@@ -58,6 +59,7 @@ vi.mock('better-sqlite3', () => {
             { name: 'notes' },
             { name: 'tags' },
             { name: 'params' },
+            { name: 'preview_image' },
             { name: 'is_favorite' },
             { name: 'last_used_at' },
             { name: 'last_generated_at' },
@@ -93,6 +95,7 @@ vi.mock('better-sqlite3', () => {
             notes: string
             tags: string
             params: string
+            previewImage: string
             isFavorite: number
             lastUsedAt: string | null
             lastGeneratedAt: string | null
@@ -105,6 +108,7 @@ vi.mock('better-sqlite3', () => {
               notes: params.notes,
               tags: params.tags,
               params: params.params,
+              preview_image: params.previewImage,
               is_favorite: params.isFavorite,
               last_used_at: params.lastUsedAt,
               last_generated_at: params.lastGeneratedAt,
@@ -157,6 +161,7 @@ vi.mock('better-sqlite3', () => {
             notes: string
             tags: string
             params: string
+            previewImage: string
             isFavorite: number
             lastUsedAt: string | null
             lastGeneratedAt: string | null
@@ -173,6 +178,7 @@ vi.mock('better-sqlite3', () => {
               notes: params.notes,
               tags: params.tags,
               params: params.params,
+              preview_image: params.previewImage,
               is_favorite: params.isFavorite,
               last_used_at: params.lastUsedAt,
               last_generated_at: params.lastGeneratedAt,
@@ -351,6 +357,26 @@ describe('prompt database', () => {
     const tags = ['绘图', '风景', '夜景', 'cyberpunk', '街景']
     const created = db.prompts.create({ content: 'x', tags })
     expect(created.tags).toEqual(tags)
+  })
+
+  it('persists and clears the custom preview image', () => {
+    const db = createPromptDatabase(':memory:')
+    const dataUrl = 'data:image/jpeg;base64,PREVIEW'
+
+    const created = db.prompts.create({
+      content: 'cyberpunk street scene',
+      tags: ['绘图'],
+      previewImage: dataUrl
+    })
+    expect(created.previewImage).toBe(dataUrl)
+
+    // 不带 previewImage 的更新不应清掉已有预览图
+    const untouched = db.prompts.update(created.id, { content: 'updated content' })
+    expect(untouched.previewImage).toBe(dataUrl)
+
+    // 显式传空串才清除
+    const cleared = db.prompts.update(created.id, { previewImage: '' })
+    expect(cleared.previewImage).toBe('')
   })
 
   it('round-trips arbitrary params JSON', () => {
