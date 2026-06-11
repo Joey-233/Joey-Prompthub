@@ -14,6 +14,9 @@ export function Settings() {
     ai_preset: 'openai',
     ai_base_url: '',
     ai_model: 'gpt-4.1-mini',
+    vision_preset: 'follow',
+    vision_base_url: '',
+    vision_model: '',
     image_preset: 'openai-image',
     image_base_url: '',
     image_model: 'gpt-image-1',
@@ -52,6 +55,31 @@ export function Settings() {
     }
   }
 
+  // 切换识图服务来源：'follow' = 跟随 AI 服务；选具体预设时回填 baseURL
+  // 和该预设的首个视觉模型建议（文本 defaultModel 大多不带视觉，不能直接用）
+  async function handleVisionPresetChange(presetId: string) {
+    const preset = presetId === 'follow' ? null : findAiPreset(presetId)
+    const seededModel = preset?.suggestedVisionModels?.[0] ?? ''
+
+    setSettings((current) => ({
+      ...current,
+      vision_preset: presetId,
+      vision_base_url: preset
+        ? preset.baseUrlEditable
+          ? String(current.vision_base_url ?? '')
+          : preset.baseURL
+        : String(current.vision_base_url ?? ''),
+      vision_model: seededModel || String(current.vision_model ?? '')
+    }))
+    await window.promptHub.settings.set('vision_preset', presetId)
+    if (preset && !preset.baseUrlEditable) {
+      await window.promptHub.settings.set('vision_base_url', preset.baseURL)
+    }
+    if (seededModel) {
+      await window.promptHub.settings.set('vision_model', seededModel)
+    }
+  }
+
   async function handleImagePresetChange(presetId: string) {
     const preset = findImagePreset(presetId)
     setSettings((current) => ({
@@ -73,11 +101,21 @@ export function Settings() {
 
   const aiPresetId = String(settings.ai_preset ?? 'openai')
   const aiPreset = useMemo(() => findAiPreset(aiPresetId), [aiPresetId])
+  const visionPresetId = String(settings.vision_preset ?? 'follow')
+  const visionFollowsAi = visionPresetId === 'follow'
+  const visionPreset = useMemo(
+    () => (visionPresetId === 'follow' ? null : findAiPreset(visionPresetId)),
+    [visionPresetId]
+  )
   const imagePresetId = String(settings.image_preset ?? 'openai-image')
   const imagePreset = useMemo(() => findImagePreset(imagePresetId), [imagePresetId])
 
   const aiBaseUrlPlaceholder = aiPreset.baseURL || 'https://api.example.com/v1'
   const imageBaseUrlPlaceholder = imagePreset.baseURL || 'https://api.example.com/v1'
+  // 跟随模式下的模型建议取自当前 AI 服务的视觉清单
+  const visionModelSuggestions = visionFollowsAi
+    ? aiPreset.suggestedVisionModels ?? []
+    : visionPreset?.suggestedVisionModels ?? []
 
   return (
     <section className="settings-layout">
@@ -134,6 +172,69 @@ export function Settings() {
           </code>
         </p>
         <SecretField label="API Key" storageKey="ai.apiKey" actionLabel="保存 API Key" />
+      </SettingsSection>
+
+      <SettingsSection
+        title="识图（视觉模型）"
+        description="快速录入的「识图」功能用这里的配置。默认跟随上面的 AI 服务，只需指定一个支持图片输入的模型；也可以完全独立接另一家。"
+      >
+        <ProviderSelect
+          label="识图服务来源"
+          value={visionPresetId}
+          options={[
+            { id: 'follow', label: '跟随 AI 服务' },
+            ...AI_PRESETS.map((preset) => ({ id: preset.id, label: preset.label }))
+          ]}
+          onChange={(value) => void handleVisionPresetChange(value)}
+        />
+        {!visionFollowsAi && visionPreset ? (
+          <label className="field">
+            <span className="field-label">识图 API Base URL</span>
+            <input
+              className="field-input"
+              placeholder={visionPreset.baseURL || 'https://api.example.com/v1'}
+              disabled={!visionPreset.baseUrlEditable && Boolean(visionPreset.baseURL)}
+              value={String(settings.vision_base_url ?? '')}
+              onChange={(event) => void updateSetting('vision_base_url', event.target.value)}
+            />
+          </label>
+        ) : null}
+        <label className="field">
+          <span className="field-label">识图模型</span>
+          <input
+            className="field-input"
+            list="vision-model-suggestions"
+            placeholder={
+              visionModelSuggestions[0] ||
+              (visionFollowsAi ? '留空 = 用 AI 服务的默认模型' : 'gpt-4o / qwen-vl-plus ...')
+            }
+            value={String(settings.vision_model ?? '')}
+            onChange={(event) => void updateSetting('vision_model', event.target.value)}
+          />
+          <datalist id="vision-model-suggestions">
+            {visionModelSuggestions.map((model) => (
+              <option key={model} value={model} />
+            ))}
+          </datalist>
+        </label>
+        {visionFollowsAi ? (
+          <p className="field-hint">
+            跟随模式复用 AI 服务的 baseURL 和 Key。若上面填的是纯文本模型（如
+            deepseek-chat），这里务必填一个视觉模型（如 gpt-4o），否则识图会报错。
+          </p>
+        ) : (
+          <>
+            {visionPreset?.note ? <p className="field-hint">{visionPreset.note}</p> : null}
+            <p className="field-hint">
+              识图 Key 留空时自动复用 AI 服务的 Key（适合同厂商/中转共用一个 Key 的情况）。
+            </p>
+            <SecretField
+              label="识图 API Key（可留空）"
+              storageKey="vision.apiKey"
+              actionLabel="保存识图 Key"
+            />
+          </>
+        )}
       </SettingsSection>
 
       <SettingsSection

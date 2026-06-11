@@ -10,7 +10,7 @@ Prompt Hub 是一款本地优先的提示词管理桌面应用。常驻桌面的
 - 📥 **快速收录** — 迷你输入框 + 剪贴板一键导入，灵感秒进库
 - 📚 **分类管理** — `绘图` / `LLM` 双类型 tag，自定义标签，全文搜索
 - ✨ **AI 优化** — 一键调用你自己的 API（OpenAI / Claude / DeepSeek / Kimi / GLM / 通义 / 豆包 / Gemini 任选）让提示词更专业
-- 👁️ **识图反推** — 上传任意图片，AI 反推出可复现画面的中文/英文绘图提示词（需模型支持图片输入，如 gpt-4o / glm-4v / qwen-vl）
+- 👁️ **识图反推** — 上传任意图片，AI 反推出可复现画面的中文/英文绘图提示词；视觉模型可独立配置（跟随 AI 服务换个模型，或单独接一家带自己的 Key）
 - 🖼️ **自定义预览图** — 给任意提示词上传一张预览图，卡片直接看效果，不再靠脑补
 - 🎨 **出图测试台** — 直接对接 OpenAI 图像 / Stable Diffusion WebUI 跑图，结果带历史回溯
 - 🔒 **隐私优先** — 全部数据落在本地 SQLite，API Key 用 Electron `safeStorage` 加密存储
@@ -51,7 +51,7 @@ Prompt Hub 是一款本地优先的提示词管理桌面应用。常驻桌面的
 - **React 19** + TypeScript + Tailwind CSS 4
 - **Zustand** 状态管理
 - **better-sqlite3** 本地数据库
-- **Vitest** 单元/组件测试（106 个测试，覆盖主进程 HTTP 调用、识图多模态协议、9 家厂商预设、DB 边界、Settings 切换流程）
+- **Vitest** 单元/组件测试（112 个测试，覆盖主进程 HTTP 调用、识图多模态协议与端点解析、9 家厂商预设、DB 边界、Settings 切换流程）
 
 ## 开发
 
@@ -110,7 +110,7 @@ docs/                    产品/设计/快速开始文档
 
 ## 当前状态
 
-- ✅ 106 个自动化测试全部通过
+- ✅ 112 个自动化测试全部通过
 - ✅ 9 家主流 AI 厂商 baseURL 协议层验证
 - ✅ TypeScript 严格模式 + 生产构建零警告
 - ✅ `npm run dist:win` 出 Windows NSIS 安装包（electron-builder）

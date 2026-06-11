@@ -133,6 +133,42 @@ export async function callAiOptimize(
 const DEFAULT_VISION_INSTRUCTION =
   '仔细观察这张图片，反推出一段可用于 AI 绘图、能复现画面主体、构图、风格、光线和质感的中文提示词。只返回提示词本身，不要任何解释。'
 
+/**
+ * 识图的服务解析。两档：
+ * - vision_preset 缺省或 'follow'：跟随「AI 服务」的 baseURL + Key，
+ *   但允许 vision_model 单独指定一个视觉模型（最常见：同一个 OpenAI Key，
+ *   文本 gpt-4.1-mini、识图 gpt-4o）。
+ * - 选了具体预设：独立 baseURL + vision_model；Key 优先用 vision.apiKey，
+ *   留空则回退复用 ai.apiKey（中转/同厂商场景少填一次）。
+ */
+function resolveVisionEndpoint(
+  database: PromptDatabase,
+  modelOverride?: string
+): ResolvedAiEndpoint {
+  const settings = database.settings.list()
+  const visionPresetId = String(settings.vision_preset ?? 'follow')
+  const visionModel = String(settings.vision_model ?? '').trim()
+
+  if (!visionPresetId || visionPresetId === 'follow') {
+    return resolveAiEndpoint(database, modelOverride || visionModel || undefined)
+  }
+
+  const preset = findAiPreset(visionPresetId)
+  const baseURL = trimTrailingSlash(
+    String(settings.vision_base_url ?? '').trim() || preset.baseURL
+  )
+  const model = modelOverride || visionModel || preset.defaultModel
+  const apiKey = secretStore.reveal('vision.apiKey') || secretStore.reveal('ai.apiKey')
+
+  if (!apiKey) {
+    throw new Error(`请先在设置页填写 ${preset.label} 的识图 API Key`)
+  }
+  if (!baseURL) throw new Error('请在设置页填写识图服务的 baseURL，或选择内置预设')
+  if (!model) throw new Error('请在设置页填写识图模型名（如 gpt-4o、qwen-vl-plus）')
+
+  return { apiKey, baseURL, model }
+}
+
 export async function callAiVision(
   database: PromptDatabase,
   input: AiDescribeImageInput
@@ -141,7 +177,7 @@ export async function callAiVision(
     throw new Error('图片数据格式不正确，请重新选择图片')
   }
 
-  const endpoint = resolveAiEndpoint(database, input.model)
+  const endpoint = resolveVisionEndpoint(database, input.model)
   const instruction = input.instruction?.trim() || DEFAULT_VISION_INSTRUCTION
 
   return postChatCompletions(endpoint, [

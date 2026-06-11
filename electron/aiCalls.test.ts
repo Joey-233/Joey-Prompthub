@@ -263,6 +263,78 @@ describe('callAiVision', () => {
       callAiVision(makeDb({ ai_preset: 'deepseek' }), { imageDataUrl: IMAGE })
     ).rejects.toThrow(/400.*image input/)
   })
+
+  it('follow mode rides the AI service endpoint but swaps in vision_model', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'ok' } }] })
+    })
+
+    await callAiVision(
+      makeDb({
+        ai_preset: 'openai',
+        ai_model: 'gpt-4.1-mini',
+        vision_preset: 'follow',
+        vision_model: 'gpt-4o'
+      }),
+      { imageDataUrl: IMAGE }
+    )
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.openai.com/v1/chat/completions')
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.model).toBe('gpt-4o')
+  })
+
+  it('a dedicated vision preset uses its own baseURL and vision.apiKey', async () => {
+    vi.mocked(secretStore.reveal).mockImplementation((key: string) =>
+      key === 'vision.apiKey' ? 'sk-vision' : 'sk-text'
+    )
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'ok' } }] })
+    })
+
+    await callAiVision(
+      makeDb({
+        ai_preset: 'deepseek',
+        vision_preset: 'qwen',
+        vision_model: 'qwen-vl-max'
+      }),
+      { imageDataUrl: IMAGE }
+    )
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+    )
+    const init = fetchMock.mock.calls[0][1]
+    expect(init.headers.Authorization).toBe('Bearer sk-vision')
+    expect(JSON.parse(init.body).model).toBe('qwen-vl-max')
+  })
+
+  it('falls back to ai.apiKey when no dedicated vision key is stored', async () => {
+    vi.mocked(secretStore.reveal).mockImplementation((key: string) =>
+      key === 'vision.apiKey' ? null : 'sk-shared'
+    )
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'ok' } }] })
+    })
+
+    await callAiVision(
+      makeDb({ vision_preset: 'glm', vision_model: 'glm-4v-plus' }),
+      { imageDataUrl: IMAGE }
+    )
+
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer sk-shared')
+  })
+
+  it('throws a vision-specific key error when neither key exists', async () => {
+    vi.mocked(secretStore.reveal).mockReturnValue(null)
+
+    await expect(
+      callAiVision(makeDb({ vision_preset: 'qwen' }), { imageDataUrl: IMAGE })
+    ).rejects.toThrow(/识图 API Key/)
+  })
 })
 
 describe('callOpenaiImage', () => {

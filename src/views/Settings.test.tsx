@@ -59,6 +59,35 @@ describe('Settings', () => {
     expect(baseUrlWrites).toHaveLength(0)
   })
 
+  it('switching vision source to a dedicated preset seeds a vision-capable model', async () => {
+    const user = userEvent.setup()
+    const settingsSet = vi.fn().mockResolvedValue(undefined)
+    window.promptHub.settings.set = settingsSet
+
+    render(<Settings />)
+
+    await user.selectOptions(screen.getByLabelText('识图服务来源'), 'qwen')
+
+    expect(settingsSet).toHaveBeenCalledWith('vision_preset', 'qwen')
+    expect(settingsSet).toHaveBeenCalledWith(
+      'vision_base_url',
+      'https://dashscope.aliyuncs.com/compatible-mode/v1'
+    )
+    // 注意：种的是视觉模型 qwen-vl-max，而不是文本默认模型 qwen-plus
+    expect(settingsSet).toHaveBeenCalledWith('vision_model', 'qwen-vl-max')
+    // 独立模式下出现单独的识图 Key 输入框
+    expect(screen.getByLabelText('识图 API Key（可留空）')).toBeInTheDocument()
+  })
+
+  it('vision source defaults to follow mode without a dedicated key field', () => {
+    render(<Settings />)
+
+    expect(
+      (screen.getByLabelText('识图服务来源') as HTMLSelectElement).value
+    ).toBe('follow')
+    expect(screen.queryByLabelText('识图 API Key（可留空）')).not.toBeInTheDocument()
+  })
+
   it('switching image preset to sd-webui keeps the user-supplied URL', async () => {
     const user = userEvent.setup()
     const settingsSet = vi.fn().mockResolvedValue(undefined)

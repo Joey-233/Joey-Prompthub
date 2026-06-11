@@ -11,6 +11,8 @@ export interface AiPreset {
   baseURL: string
   defaultModel: string
   suggestedModels: string[]
+  /** 支持图片输入的模型建议（识图功能用）。空数组 = 该厂商暂无视觉模型。 */
+  suggestedVisionModels?: string[]
   /** 是否允许用户编辑 baseURL（自定义预设为 true，其余固定）。 */
   baseUrlEditable?: boolean
   /** UI 提示文案。 */
@@ -23,7 +25,8 @@ export const AI_PRESETS: AiPreset[] = [
     label: 'OpenAI',
     baseURL: 'https://api.openai.com/v1',
     defaultModel: 'gpt-4.1-mini',
-    suggestedModels: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4o', 'gpt-4o-mini', 'o4-mini']
+    suggestedModels: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4o', 'gpt-4o-mini', 'o4-mini'],
+    suggestedVisionModels: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini']
   },
   {
     id: 'anthropic',
@@ -31,6 +34,7 @@ export const AI_PRESETS: AiPreset[] = [
     baseURL: 'https://api.anthropic.com/v1',
     defaultModel: 'claude-sonnet-4-5',
     suggestedModels: ['claude-opus-4-5', 'claude-sonnet-4-5', 'claude-haiku-4-5'],
+    suggestedVisionModels: ['claude-sonnet-4-5', 'claude-opus-4-5', 'claude-haiku-4-5'],
     note: 'Anthropic 提供的 OpenAI 兼容端点（/v1/chat/completions）'
   },
   {
@@ -38,28 +42,33 @@ export const AI_PRESETS: AiPreset[] = [
     label: 'DeepSeek',
     baseURL: 'https://api.deepseek.com/v1',
     defaultModel: 'deepseek-chat',
-    suggestedModels: ['deepseek-chat', 'deepseek-reasoner']
+    suggestedModels: ['deepseek-chat', 'deepseek-reasoner'],
+    suggestedVisionModels: [],
+    note: 'DeepSeek 开放平台暂无视觉模型，识图请独立接其他服务'
   },
   {
     id: 'kimi',
     label: '月之暗面 Kimi',
     baseURL: 'https://api.moonshot.cn/v1',
     defaultModel: 'kimi-k2-0905-preview',
-    suggestedModels: ['kimi-k2-0905-preview', 'moonshot-v1-8k', 'moonshot-v1-32k']
+    suggestedModels: ['kimi-k2-0905-preview', 'moonshot-v1-8k', 'moonshot-v1-32k'],
+    suggestedVisionModels: ['kimi-latest', 'moonshot-v1-8k-vision-preview', 'moonshot-v1-32k-vision-preview']
   },
   {
     id: 'glm',
     label: '智谱 GLM',
     baseURL: 'https://open.bigmodel.cn/api/paas/v4',
     defaultModel: 'glm-4.6',
-    suggestedModels: ['glm-4.6', 'glm-4-plus', 'glm-4-air']
+    suggestedModels: ['glm-4.6', 'glm-4-plus', 'glm-4-air'],
+    suggestedVisionModels: ['glm-4v-plus', 'glm-4v', 'glm-4v-flash']
   },
   {
     id: 'qwen',
     label: '通义千问 Qwen',
     baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     defaultModel: 'qwen-plus',
-    suggestedModels: ['qwen-max', 'qwen-plus', 'qwen-turbo', 'qwen3-235b-a22b']
+    suggestedModels: ['qwen-max', 'qwen-plus', 'qwen-turbo', 'qwen3-235b-a22b'],
+    suggestedVisionModels: ['qwen-vl-max', 'qwen-vl-plus', 'qwen2.5-vl-72b-instruct']
   },
   {
     id: 'doubao',
@@ -67,6 +76,7 @@ export const AI_PRESETS: AiPreset[] = [
     baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
     defaultModel: 'doubao-seed-1.6',
     suggestedModels: ['doubao-seed-1.6', 'doubao-1.5-pro-32k', 'doubao-pro-32k'],
+    suggestedVisionModels: ['doubao-1.5-vision-pro-32k', 'doubao-1.5-vision-lite'],
     note: '可填模型 ID 或接入点 ep-xxxxxxxx-xxxxx'
   },
   {
@@ -75,6 +85,7 @@ export const AI_PRESETS: AiPreset[] = [
     baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai',
     defaultModel: 'gemini-2.5-pro',
     suggestedModels: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
+    suggestedVisionModels: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
     note: 'Gemini 提供的 OpenAI 兼容端点'
   },
   {
@@ -83,6 +94,7 @@ export const AI_PRESETS: AiPreset[] = [
     baseURL: '',
     defaultModel: '',
     suggestedModels: [],
+    suggestedVisionModels: [],
     baseUrlEditable: true,
     note: '任意 OpenAI 兼容端点：vLLM、Ollama、LiteLLM、第三方中转都行'
   }

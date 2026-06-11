@@ -149,7 +149,8 @@ export function RecognizeImageDialog({
         </div>
 
         <p className="field-hint">
-          识图走当前设置页选定的 AI 服务，需要模型支持图片输入（如 gpt-4o、glm-4v、qwen-vl-plus、doubao-1.5-vision 等）。
+          识图走设置页「识图（视觉模型）」的配置——默认跟随 AI 服务，可在那里单独指定视觉模型（如
+          gpt-4o、glm-4v、qwen-vl-plus）或独立接另一家服务。
         </p>
 
         {error ? <div className="error-banner">{error}</div> : null}

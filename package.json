@@ -4,7 +4,7 @@
   "description": "桌面提示词工坊：悬浮球收录灵感、统一管理 AI 绘图与 LLM 提示词。",
   "author": "Joey-233 <189076254+Joey-233@users.noreply.github.com>",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "main": "out/main/main.js",
   "scripts": {
