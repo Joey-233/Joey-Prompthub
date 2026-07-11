@@ -59,3 +59,26 @@ it('applies only the latest overlapping save for one prompt', async () => {
   first.resolve({ ...prompts[0], content: 'first' }); await pendingFirst
   expect(useTestBenchStore.getState().prompts.find((prompt) => prompt.id === 'a')?.content).toBe('second')
 })
+
+it('invalidates an active generation when restoring the same prompt snapshot', async () => {
+  const gate = deferred<null>()
+  window.promptHub.generations.create = vi.fn().mockReturnValue(gate.promise)
+  useTestBenchStore.setState({
+    prompts,
+    selectedPromptId: 'a',
+    draftContent: 'prompt a',
+    providerId: 'mock-image',
+    params: { width: 512, height: 512, count: 1 },
+    history: [{ id: 'history-a', promptId: 'a', providerId: 'mock-image', status: 'mocked', promptTitleSnapshot: 'A', promptSnapshot: 'prompt a', imageData: 'old', params: {}, createdAt: '2026-01-02' }],
+    results: [],
+    loading: false,
+    generateError: null
+  })
+  const pending = useTestBenchStore.getState().generate()
+  await vi.waitFor(() => expect(window.promptHub.generations.create).toHaveBeenCalled())
+  useTestBenchStore.getState().restoreHistoryEntry('history-a')
+  expect(useTestBenchStore.getState()).toMatchObject({ selectedPromptId: 'a', draftContent: 'prompt a', loading: false, generateError: null, results: [] })
+  gate.resolve(null)
+  await pending
+  expect(useTestBenchStore.getState()).toMatchObject({ draftContent: 'prompt a', loading: false, generateError: null, results: [] })
+})

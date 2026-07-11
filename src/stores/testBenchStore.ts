@@ -148,10 +148,12 @@ export const useTestBenchStore = create<TestBenchState>((set, get) => ({
     const sourcePrompt =
       get().prompts.find((prompt) => prompt.id === entry.promptId) ?? null
 
+    generateRequest++
     set({
       selectedPromptId: sourcePrompt?.id ?? null,
       draftContent: entry.promptSnapshot,
       results: [],
+      loading: false,
       saveStatus: 'idle',
       generateError: null
     })
