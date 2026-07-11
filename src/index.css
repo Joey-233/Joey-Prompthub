@@ -1901,7 +1901,7 @@ html:has(#floating-root) body {
 
 /* Seedance2 compact workspace */
 .s2-resource { display: flex; min-height: 0; height: 100%; flex-direction: column; gap: 8px; overflow: auto; padding: 10px; }
-.s2-resource [role='tablist'] { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.s2-resource [role='tablist'] { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
 .s2-resource [role='tab'], .s2-resource > .s2-list-item { border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 6px 8px; text-align: left; color: inherit; }
 .s2-main { display: flex; min-height: 0; height: 100%; flex-direction: column; overflow: hidden; padding: 0; }
 .s2-toolbar, .s2-section-nav { flex: none; background: var(--surface); }

@@ -51,7 +51,7 @@ describe('Seedance2 workspace', () => {
     expect(screen.getByRole('button', { name: '参考资料', expanded: true })).toBeInTheDocument()
   })
 
-  it('collapses an expanded section, switches sections, and never collapses around focused content', async () => {
+  it('collapses an expanded section deliberately even when content had focus', async () => {
     seedApi(); render(<Seedance2 />); const user = userEvent.setup()
     const intro = screen.getByRole('button', { name: '开篇总述', expanded: true })
     await user.click(intro)
@@ -63,7 +63,7 @@ describe('Seedance2 workspace', () => {
     const textarea = screen.getByLabelText('风格内容')
     textarea.focus()
     await user.click(style)
-    expect(style).toHaveAttribute('aria-expanded', 'true')
+    expect(style).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('confirms clean template deletion without a native confirm', async () => {
@@ -76,6 +76,56 @@ describe('Seedance2 workspace', () => {
     await waitFor(() => expect(api.deleteTemplate).toHaveBeenCalledWith('one'))
     expect(api.listTemplates).toHaveBeenCalledTimes(2)
     expect(screen.getByLabelText('模板标题')).toHaveValue('未命名模板')
+  })
+
+  it('requires destructive confirmation after discarding a dirty delete', async () => {
+    const api = seedApi(); vi.mocked(api.deleteTemplate).mockResolvedValue(undefined)
+    render(<Seedance2 />); const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'One' }))
+    await user.type(screen.getByLabelText('开篇总述内容'), '!')
+    await user.click(screen.getByRole('button', { name: '删除' }))
+    await user.click(screen.getByRole('button', { name: '放弃更改' }))
+    expect(api.deleteTemplate).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: '删除模板' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '确认删除' }))
+    await waitFor(() => expect(api.deleteTemplate).toHaveBeenCalledWith('one'))
+  })
+
+  it('requires destructive confirmation after saving a dirty delete', async () => {
+    const api = seedApi(); vi.mocked(api.deleteTemplate).mockResolvedValue(undefined)
+    render(<Seedance2 />); const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'One' }))
+    await user.type(screen.getByLabelText('开篇总述内容'), '!')
+    await user.click(screen.getByRole('button', { name: '删除' }))
+    await user.click(screen.getByRole('button', { name: '保存并继续' }))
+    expect(await screen.findByRole('dialog', { name: '删除模板' })).toBeInTheDocument()
+    expect(api.updateTemplate).toHaveBeenCalledOnce()
+    expect(api.deleteTemplate).not.toHaveBeenCalled()
+  })
+
+  it('prevents duplicate create and keeps newer edits dirty when save resolves', async () => {
+    const api = seedApi()
+    let resolve!: (value: Seedance2TemplateRecord) => void
+    vi.mocked(api.createTemplate).mockImplementation(() => new Promise((done) => { resolve = done }))
+    render(<Seedance2 />); const user = userEvent.setup()
+    const intro = screen.getByLabelText('开篇总述内容')
+    await user.type(intro, '!')
+    const save = screen.getByRole('button', { name: '保存为新模板' })
+    await user.click(save)
+    expect(screen.getByRole('button', { name: '保存中…' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: '保存中…' }))
+    expect(api.createTemplate).toHaveBeenCalledTimes(1)
+    await user.type(intro, ' newer')
+    resolve({ ...templates[0], data: data('saved') })
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存' })).toBeEnabled())
+    expect((intro as HTMLTextAreaElement).value).toContain('newer')
+  })
+
+  it('shows clipboard failures instead of leaking an unhandled rejection', async () => {
+    seedApi(); vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(new Error('clipboard denied'))
+    render(<Seedance2 />); const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: '复制' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('clipboard denied')
   })
 
   it('guards a dirty template switch and cancel retains the draft', async () => {
@@ -120,5 +170,19 @@ describe('Seedance2 workspace', () => {
     act(() => useAppStore.getState().setCurrentView('settings'))
     expect(useAppStore.getState().currentView).toBe('seedance2')
     expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('preserves test-bench navigation payload and ignores same-view navigation', async () => {
+    seedApi(); useAppStore.getState().continueNavigation({ view: 'seedance2', pendingTestBenchPromptId: null })
+    render(<Seedance2 />); const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'One' }))
+    await user.type(screen.getByLabelText('开篇总述内容'), '!')
+    act(() => useAppStore.getState().setCurrentView('seedance2'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    act(() => useAppStore.getState().openTestBench('prompt-42'))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '放弃更改' }))
+    expect(useAppStore.getState().currentView).toBe('test-bench')
+    expect(useAppStore.getState().pendingTestBenchPromptId).toBe('prompt-42')
   })
 })

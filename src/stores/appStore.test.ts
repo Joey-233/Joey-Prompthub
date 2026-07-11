@@ -134,4 +134,16 @@ describe('appStore layout preferences', () => {
       store.getState().layout
     )
   })
+
+  it('guards full navigation payload and ignores same-view requests', async () => {
+    const store = await loadStore()
+    store.getState().continueNavigation({ view: 'seedance2', pendingTestBenchPromptId: null })
+    const guard = vi.fn(() => true)
+    store.getState().setNavigationGuard(guard)
+    store.getState().setCurrentView('seedance2')
+    expect(guard).not.toHaveBeenCalled()
+    store.getState().openTestBench('prompt-42')
+    expect(guard).toHaveBeenCalledWith({ view: 'test-bench', pendingTestBenchPromptId: 'prompt-42' })
+    expect(store.getState().currentView).toBe('seedance2')
+  })
 })
