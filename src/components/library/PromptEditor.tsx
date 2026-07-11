@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type SetStateAction } from 'react'
 
 import { IMAGE_TAG, type PromptRecord } from '../../shared/types'
 import { useDebouncedEffect } from '../../hooks/useDebouncedEffect'
@@ -49,7 +49,11 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
   const previewInputRef = useRef<HTMLInputElement | null>(null)
   const activePromptIdRef = useRef(prompt.id)
   activePromptIdRef.current = prompt.id
-  const latestPatchRef = useRef<ReturnType<typeof buildDraftPatch> | null>(null)
+  const revisionRef = useRef(0)
+  const dirtyRef = useRef(false)
+  const mountedRef = useRef(true)
+  const latestPatchRef = useRef<{ patch: ReturnType<typeof buildDraftPatch>; revision: number } | null>(null)
+  const sourcePromptRef = useRef(prompt)
 
   // Tags are stored as string[] in the data model, but the editor input is a
   // single comma-separated string. We keep the raw text in local state so the
@@ -65,6 +69,19 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
   updatePromptRef.current = updatePrompt
 
   useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
+  function updateDraft(action: SetStateAction<PromptRecord>) {
+    revisionRef.current += 1
+    dirtyRef.current = true
+    setSaveStatus('saving')
+    latestPatchRef.current = null
+    setDraft(action)
+  }
+
+  useEffect(() => {
     return () => {
       const d = pendingDraftRef.current
       if (hasDraftChanges(d, prompt)) {
@@ -74,20 +91,33 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
   }, [prompt.id])
 
   useEffect(() => {
+    const switchedPrompt = sourcePromptRef.current.id !== prompt.id
+    const currentDraft = pendingDraftRef.current
+    const incomingMatchesDraft = !hasDraftChanges(currentDraft, prompt)
+    sourcePromptRef.current = prompt
+    if (!switchedPrompt && dirtyRef.current && !incomingMatchesDraft) return
     setDraft(prompt)
     setTagsInput(prompt.tags.join(', '))
-    setConfirmDelete(false)
-    setPreviewError('')
-    setSaveStatus('saved')
-    latestPatchRef.current = null
+    dirtyRef.current = false
+    if (switchedPrompt) {
+      revisionRef.current = 0
+      setConfirmDelete(false)
+      setPreviewError('')
+      setSaveStatus('saved')
+      latestPatchRef.current = null
+    }
   }, [prompt])
 
-  function savePatch(id: string, patch: ReturnType<typeof buildDraftPatch>) {
-    latestPatchRef.current = patch
+  function savePatch(id: string, patch: ReturnType<typeof buildDraftPatch>, revision = revisionRef.current) {
+    latestPatchRef.current = { patch, revision }
     if (activePromptIdRef.current === id) setSaveStatus('saving')
     return updatePromptRef.current(id, patch).then(
-      () => { if (activePromptIdRef.current === id) setSaveStatus('saved') },
-      () => { if (activePromptIdRef.current === id) setSaveStatus('error') }
+      () => {
+        if (mountedRef.current && activePromptIdRef.current === id && revisionRef.current === revision && latestPatchRef.current?.revision === revision) setSaveStatus('saved')
+      },
+      () => {
+        if (mountedRef.current && activePromptIdRef.current === id && revisionRef.current === revision && latestPatchRef.current?.revision === revision) setSaveStatus('error')
+      }
     )
   }
 
@@ -143,14 +173,14 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
         )
       )
       const next = [...current, ...dataUrls].slice(0, MAX_PREVIEW_IMAGES)
-      setDraft((c) => ({ ...c, previewImages: next, previewImage: next[0] ?? '' }))
+      updateDraft((c) => ({ ...c, previewImages: next, previewImage: next[0] ?? '' }))
     } catch (err) {
       setPreviewError(err instanceof Error ? err.message : '预览图读取失败')
     }
   }
 
   function replacePreviewAt(index: number, dataUrl: string | null) {
-    setDraft((c) => {
+    updateDraft((c) => {
       const list = [...getImages(c)]
       if (dataUrl === null) {
         list.splice(index, 1)
@@ -184,7 +214,7 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
         <span className="editor-save-status" role="status" data-status={saveStatus}>
           {saveStatus === 'saving' ? '保存中…' : saveStatus === 'error' ? '保存失败' : '已保存'}
         </span>
-        {saveStatus === 'error' && latestPatchRef.current ? <button className="editor-retry" type="button" onClick={() => void savePatch(prompt.id, latestPatchRef.current!)}>重试</button> : null}
+        {saveStatus === 'error' && latestPatchRef.current ? <button className="editor-retry" type="button" onClick={() => { const latest = latestPatchRef.current!; void savePatch(prompt.id, latest.patch, latest.revision) }}>重试</button> : null}
       </header>
       <div className="editor-fields">
         <label className="field">
@@ -194,7 +224,7 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
             className="field-textarea field-textarea-mono"
             value={draft.content}
             onChange={(event) =>
-              setDraft((current) => ({ ...current, content: event.target.value }))
+              updateDraft((current) => ({ ...current, content: event.target.value }))
             }
           />
         </label>
@@ -207,7 +237,7 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
             onChange={(event) => {
               const raw = event.target.value
               setTagsInput(raw)
-              setDraft((current) => ({
+              updateDraft((current) => ({
                 ...current,
                 tags: raw
                   .split(',')
@@ -226,7 +256,7 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
             placeholder="给自己留点 context — 灵感来源、效果、调试要点..."
             value={draft.notes}
             onChange={(event) =>
-              setDraft((current) => ({ ...current, notes: event.target.value }))
+              updateDraft((current) => ({ ...current, notes: event.target.value }))
             }
           />
         </label>
@@ -366,7 +396,7 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
           content={draft.content}
           onClose={() => setShowOptimizeDialog(false)}
           onAccept={(value) => {
-            setDraft((current) => ({ ...current, content: value }))
+            updateDraft((current) => ({ ...current, content: value }))
             setShowOptimizeDialog(false)
           }}
         />

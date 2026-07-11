@@ -139,6 +139,68 @@ describe('PromptEditor', () => {
     expect(screen.getByRole('status')).not.toHaveTextContent('保存失败')
   })
 
+  it('preserves a newer same-prompt edit when an older save updates props', async () => {
+    vi.useFakeTimers()
+    let resolveA!: (value: PromptRecord) => void
+    let resolveB!: (value: PromptRecord) => void
+    const updatePrompt = vi.fn()
+      .mockImplementationOnce(() => new Promise<PromptRecord>((resolve) => { resolveA = resolve }))
+      .mockImplementationOnce(() => new Promise<PromptRecord>((resolve) => { resolveB = resolve }))
+    window.promptHub.prompts.update = updatePrompt
+    const { rerender } = render(<PromptEditor prompt={prompt} />)
+
+    fireEvent.change(screen.getByLabelText('提示词内容'), { target: { value: 'edit A' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    fireEvent.change(screen.getByLabelText('提示词内容'), { target: { value: 'edit B' } })
+
+    await act(async () => resolveA({ ...prompt, content: 'edit A' }))
+    rerender(<PromptEditor prompt={{ ...prompt, content: 'edit A' }} />)
+    expect(screen.getByLabelText('提示词内容')).toHaveValue('edit B')
+    expect(screen.getByRole('status')).toHaveTextContent('保存中')
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(updatePrompt).toHaveBeenLastCalledWith('image-1', expect.objectContaining({ content: 'edit B' }))
+    expect(screen.queryByRole('button', { name: '重试' })).not.toBeInTheDocument()
+    await act(async () => resolveB({ ...prompt, content: 'edit B' }))
+    expect(screen.getByRole('status')).toHaveTextContent('已保存')
+  })
+
+  it('ignores an older same-prompt error and retries only the newest failed patch', async () => {
+    vi.useFakeTimers()
+    let rejectA!: (reason: Error) => void
+    let rejectB!: (reason: Error) => void
+    const updatePrompt = vi.fn()
+      .mockImplementationOnce(() => new Promise((_, reject) => { rejectA = reject }))
+      .mockImplementationOnce(() => new Promise((_, reject) => { rejectB = reject }))
+      .mockResolvedValue(prompt)
+    window.promptHub.prompts.update = updatePrompt
+    render(<PromptEditor prompt={prompt} />)
+    fireEvent.change(screen.getByLabelText('提示词内容'), { target: { value: 'edit A' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    fireEvent.change(screen.getByLabelText('提示词内容'), { target: { value: 'edit B' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+
+    await act(async () => rejectA(new Error('stale failure')))
+    expect(screen.queryByRole('button', { name: '重试' })).not.toBeInTheDocument()
+    await act(async () => rejectB(new Error('latest failure')))
+    fireEvent.click(screen.getByRole('button', { name: '重试' }))
+    expect(updatePrompt).toHaveBeenLastCalledWith('image-1', expect.objectContaining({ content: 'edit B' }))
+  })
+
+  it('offers retry only for the latest failed draft', async () => {
+    vi.useFakeTimers()
+    let rejectLatest!: (reason: Error) => void
+    const updatePrompt = vi.fn().mockImplementation(() => new Promise((_, reject) => { rejectLatest = reject }))
+    window.promptHub.prompts.update = updatePrompt
+    render(<PromptEditor prompt={prompt} />)
+    fireEvent.change(screen.getByLabelText('提示词内容'), { target: { value: 'retry this' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    await act(async () => rejectLatest(new Error('latest failed')))
+    expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('提示词内容'), { target: { value: 'newer local edit' } })
+    expect(screen.queryByRole('button', { name: '重试' })).not.toBeInTheDocument()
+  })
+
   it('removes an existing preview image with an empty-string patch', async () => {
     vi.useFakeTimers()
     const promptWithPreview: PromptRecord = {

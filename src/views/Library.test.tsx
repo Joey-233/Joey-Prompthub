@@ -148,6 +148,7 @@ describe('Library', () => {
     expect(screen.getByRole('main', { name: '提示词工作区' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: '提示词详情' })).toBeInTheDocument()
     expect(screen.getByLabelText('快速录入')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '提示词详情' }).querySelector('.library-detail')).toHaveAttribute('data-compact', 'true')
   })
 
   it('searches, sorts, and repairs selection when the result changes', async () => {

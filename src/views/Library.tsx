@@ -90,6 +90,6 @@ export function Library() {
           </div>
       )}
     </main>
-  const detail = selectedPrompt ? <PromptEditor prompt={selectedPrompt} /> : <div className="empty-state library-detail-empty">选择一条提示词即可查看和编辑详情</div>
+  const detail = <div className="library-detail" data-compact="true">{selectedPrompt ? <PromptEditor prompt={selectedPrompt} /> : <div className="empty-state library-detail-empty">选择一条提示词即可查看和编辑详情</div>}</div>
   return <WorkspaceLayout resource={<LibrarySidebar />} resourceLabel="提示词筛选" main={main} detail={detail} detailLabel="提示词详情" />
 }

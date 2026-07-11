@@ -604,6 +604,16 @@ button {
 .editor-save-status[data-status='error'] { color: #b84c42; }
 .editor-retry { padding: 3px 8px; border: 1px solid var(--pv-border); border-radius: 6px; background: transparent; }
 
+.detail-pane:has(> .library-detail) { padding: 0; }
+.library-detail { min-height: 100%; }
+.library-detail .editor-panel {
+  gap: 8px;
+  padding: 12px;
+  max-height: none;
+  border-radius: 10px;
+}
+.library-detail .editor-fields { gap: 8px; }
+
 .editor-fields {
   display: grid;
   gap: 14px;
