@@ -38,7 +38,10 @@ function isPromptRecord(value: unknown): value is PromptRecord {
   )
 }
 
-export const usePromptStore = create<PromptState>((set, get) => ({
+export const usePromptStore = create<PromptState>((set, get) => {
+  const updateSequenceByPrompt = new Map<string, number>()
+
+  return ({
   prompts: [],
   loading: false,
   filterTag: null,
@@ -67,7 +70,11 @@ export const usePromptStore = create<PromptState>((set, get) => ({
     await get().loadPrompts()
   },
   async updatePrompt(id, patch) {
+    const sequence = (updateSequenceByPrompt.get(id) ?? 0) + 1
+    updateSequenceByPrompt.set(id, sequence)
     const updated = await window.promptHub.prompts.update(id, patch)
+
+    if (updateSequenceByPrompt.get(id) !== sequence) return
 
     if (!isPromptRecord(updated)) {
       await get().loadPrompts()
@@ -112,4 +119,5 @@ export const usePromptStore = create<PromptState>((set, get) => ({
   selectPrompt(id) {
     set({ selectedPromptId: id })
   }
-}))
+  })
+})
