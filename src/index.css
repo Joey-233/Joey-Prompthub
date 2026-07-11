@@ -1225,6 +1225,60 @@ button {
   align-content: start;
 }
 
+.settings-nav,
+.settings-detail {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.settings-nav button {
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--pv-text-muted);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-nav button:hover,
+.settings-nav button.is-active {
+  color: var(--pv-text);
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.settings-detail h2,
+.settings-detail p {
+  margin: 0;
+}
+
+.settings-save-summary,
+.settings-section-status {
+  color: var(--pv-text-muted);
+  font-size: 0.84rem;
+}
+
+.settings-retry {
+  padding: 0;
+  border: 0;
+  color: var(--pv-danger, #a54432);
+  background: transparent;
+  cursor: pointer;
+}
+
+.settings-advanced {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--pv-border);
+  border-radius: 16px;
+}
+
+.settings-advanced[open] summary {
+  margin-bottom: 12px;
+}
+
 .bench-empty-state {
   min-height: 560px;
   padding: 24px;

@@ -3,21 +3,25 @@ import { useEffect, useRef, useState } from 'react'
 export function SecretField({
   label,
   storageKey,
-  actionLabel
+  actionLabel,
+  onConfiguredChange
 }: {
   label: string
   storageKey: string
   actionLabel: string
+  onConfiguredChange?: (configured: boolean) => void
 }) {
   const [value, setValue] = useState('')
   const [status, setStatus] = useState('未配置')
   const [justSaved, setJustSaved] = useState(false)
+  const [revealed, setRevealed] = useState<string | null>(null)
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     void window.promptHub.secure.has(storageKey).then((hasValue) => {
       setStatus(hasValue ? '已加密保存' : '未配置')
-    })
+      onConfiguredChange?.(hasValue)
+    }).catch(() => setStatus('读取失败'))
     return () => {
       if (feedbackTimer.current) clearTimeout(feedbackTimer.current)
     }
@@ -28,19 +32,42 @@ export function SecretField({
       return
     }
 
-    await window.promptHub.secure.set(storageKey, value.trim())
-    setValue('')
-    setStatus('已加密保存')
-    setJustSaved(true)
+    try {
+      await window.promptHub.secure.set(storageKey, value.trim())
+      setValue('')
+      setStatus('已加密保存')
+      onConfiguredChange?.(true)
+      setJustSaved(true)
+    } catch {
+      setStatus('保存失败，请重试')
+      return
+    }
     if (feedbackTimer.current) clearTimeout(feedbackTimer.current)
     feedbackTimer.current = setTimeout(() => setJustSaved(false), 3000)
   }
 
   async function handleClear() {
-    await window.promptHub.secure.delete(storageKey)
-    setValue('')
-    setStatus('未配置')
-    setJustSaved(false)
+    try {
+      await window.promptHub.secure.delete(storageKey)
+      setValue('')
+      setStatus('未配置')
+      onConfiguredChange?.(false)
+      setJustSaved(false)
+    } catch {
+      setStatus('清除失败，请重试')
+    }
+  }
+
+  async function handleReveal() {
+    if (revealed !== null) {
+      setRevealed(null)
+      return
+    }
+    try {
+      setRevealed((await window.promptHub.secure.reveal(storageKey)) ?? '')
+    } catch {
+      setStatus('读取失败，请重试')
+    }
   }
 
   return (
@@ -61,18 +88,16 @@ export function SecretField({
           {justSaved ? '✓ 已加密保存到本地' : status}
         </span>
         {status === '已加密保存' ? (
-          <button
-            className="editor-action editor-action-danger"
-            type="button"
-            onClick={() => void handleClear()}
-          >
-            清除
-          </button>
+          <>
+            <button className="editor-action" type="button" onClick={() => void handleReveal()}>{revealed === null ? '显示' : '隐藏'}</button>
+            <button className="editor-action editor-action-danger" type="button" onClick={() => void handleClear()}>清除</button>
+          </>
         ) : null}
         <button className="editor-action" type="button" onClick={() => void handleSave()}>
           {actionLabel}
         </button>
       </div>
+      {revealed !== null ? <output className="secret-reveal" aria-label={`${label} 当前值`}>{revealed || '空'}</output> : null}
     </div>
   )
 }
