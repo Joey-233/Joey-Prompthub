@@ -43,6 +43,9 @@ function deriveInitialProvider(settings: Record<string, unknown>): string {
   return 'openai-image'
 }
 
+let saveRequest = 0
+let generateRequest = 0
+
 export const useTestBenchStore = create<TestBenchState>((set, get) => ({
   prompts: [],
   selectedPromptId: null,
@@ -104,15 +107,20 @@ export const useTestBenchStore = create<TestBenchState>((set, get) => ({
       return
     }
 
+    saveRequest++
+    generateRequest++
     set({
       selectedPromptId: id,
       draftContent: prompt.content,
       results: [],
       saveStatus: 'idle',
-      generateError: null
+      generateError: null,
+      loading: false
     })
   },
   setDraftContent(value) {
+    saveRequest++
+    generateRequest++
     set({ draftContent: value, saveStatus: 'idle' })
   },
   setProviderId(id) {
@@ -153,6 +161,9 @@ export const useTestBenchStore = create<TestBenchState>((set, get) => ({
       return
     }
 
+    const request = ++saveRequest
+    const promptId = state.selectedPromptId
+    const draftContent = state.draftContent
     set({ saveStatus: 'saving' })
 
     try {
@@ -164,6 +175,7 @@ export const useTestBenchStore = create<TestBenchState>((set, get) => ({
         ...(currentPrompt ? buildUsagePatch(currentPrompt, timestamp) : {})
       })
 
+      if (request !== saveRequest || get().selectedPromptId !== promptId || get().draftContent !== draftContent) return
       set((current) => ({
         prompts: current.prompts.map((prompt) =>
           prompt.id === updated.id ? updated : prompt
@@ -171,7 +183,7 @@ export const useTestBenchStore = create<TestBenchState>((set, get) => ({
         saveStatus: 'saved'
       }))
     } catch {
-      set({ saveStatus: 'error' })
+      if (request === saveRequest && get().selectedPromptId === promptId && get().draftContent === draftContent) set({ saveStatus: 'error' })
     }
   },
   async generate() {
@@ -180,6 +192,9 @@ export const useTestBenchStore = create<TestBenchState>((set, get) => ({
       return
     }
 
+    const request = ++generateRequest
+    const promptId = state.selectedPromptId
+    const draftContent = state.draftContent
     const selectedPrompt = state.prompts.find(
       (prompt) => prompt.id === state.selectedPromptId
     )
@@ -238,16 +253,16 @@ export const useTestBenchStore = create<TestBenchState>((set, get) => ({
 
       await get().loadHistory()
 
-      set({
-        results: persisted,
-        generateError: outcome.status === 'failed' ? '生成失败：服务没有返回任何图片' : null
-      })
+      if (request === generateRequest && get().selectedPromptId === promptId && get().draftContent === draftContent) set({
+          results: persisted,
+          generateError: outcome.status === 'failed' ? '生成失败：服务没有返回任何图片' : null
+        })
     } catch (caughtError) {
       const message =
         caughtError instanceof Error ? caughtError.message : '生成失败，请稍后重试'
-      set({ generateError: message })
+      if (request === generateRequest && get().selectedPromptId === promptId && get().draftContent === draftContent) set({ generateError: message })
     } finally {
-      set({ loading: false })
+      if (request === generateRequest) set({ loading: false })
     }
   }
 }))

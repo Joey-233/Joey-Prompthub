@@ -114,13 +114,16 @@ beforeEach(() => {
     prompts: [],
     selectedPromptId: null,
     draftContent: '',
+    providerId: 'mock-image',
+    params: { width: 512, height: 512, count: 3 },
     results: [],
     history: [],
     loading: false,
     loadingPrompts: false,
     loadingHistory: false,
     historyScope: 'current-prompt',
-    saveStatus: 'idle'
+    saveStatus: 'idle',
+    generateError: null
   })
 })
 

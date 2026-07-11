@@ -901,11 +901,11 @@ button {
 .bench-editor-panel { display: grid; gap: 8px; }
 .bench-editor-panel .field-textarea { min-height: 88px; max-height: 160px; }
 .bench-save-row { display: flex; align-items: center; gap: 10px; }
-.bench-canvas-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border-color); }
-.bench-canvas-tabs button { padding: 7px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-secondary); }
-.bench-canvas-tabs button[aria-selected='true'] { border-bottom-color: var(--accent-color); color: var(--text-primary); }
+.bench-canvas-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--pv-border); }
+.bench-canvas-tabs button { padding: 7px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--pv-text-muted); }
+.bench-canvas-tabs button[aria-selected='true'] { border-bottom-color: var(--pv-accent); color: var(--pv-text); }
 .bench-result-canvas { min-height: 0; flex: 1; overflow: auto; }
-.bench-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; padding: 9px 11px; border: 1px solid var(--danger-color); border-radius: 8px; color: var(--danger-color); }
+.bench-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; padding: 9px 11px; border: 1px solid var(--pv-danger); border-radius: 8px; color: var(--pv-danger); }
 .generation-settings { display: grid; align-content: start; gap: 12px; padding: 14px; }
 .generation-settings .bench-param-field { display: grid; gap: 5px; }
 .generation-settings select, .generation-settings input { width: 100%; }
