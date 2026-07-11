@@ -124,6 +124,31 @@ describe('Settings', () => {
     expect(screen.getByText('配置完整')).toBeInTheDocument()
   })
 
+  it('reports the exact missing AI dependencies in vision follow mode', async () => {
+    const user = userEvent.setup()
+    window.promptHub.settings.list = vi.fn().mockResolvedValue({ ai_base_url: '', ai_model: 'gpt-4.1-mini', vision_preset: 'follow' })
+    window.promptHub.secure.has = vi.fn().mockResolvedValue(false)
+    render(<Settings />)
+    await user.click(screen.getByRole('button', { name: '视觉模型' }))
+    await waitFor(() => expect(window.promptHub.settings.list).toHaveBeenCalled())
+    await user.click(screen.getByRole('button', { name: '检查配置' }))
+    expect(screen.getByText('缺少：AI Base URL、AI API Key')).toBeInTheDocument()
+  })
+
+  it('invalidates a vision follow check when the followed AI base URL changes', async () => {
+    const user = userEvent.setup()
+    let finishLoad!: (value: Record<string, unknown>) => void
+    window.promptHub.settings.list = vi.fn().mockReturnValue(new Promise((resolve) => { finishLoad = resolve }))
+    window.promptHub.secure.has = vi.fn().mockResolvedValue(true)
+    render(<Settings />)
+    await screen.findByText('已加密保存')
+    await user.click(screen.getByRole('button', { name: '视觉模型' }))
+    await user.click(screen.getByRole('button', { name: '检查配置' }))
+    expect(screen.getByText('配置完整')).toBeInTheDocument()
+    await act(async () => finishLoad({ ai_base_url: '' }))
+    expect(screen.queryByText('配置完整')).not.toBeInTheDocument()
+  })
+
   it('reports a missing vision model when follow mode has no override or AI fallback', async () => {
     const user = userEvent.setup()
     window.promptHub.settings.list = vi.fn().mockResolvedValue({ ai_model: '', vision_model: '', vision_preset: 'follow' })
@@ -131,7 +156,7 @@ describe('Settings', () => {
     await user.click(screen.getByRole('button', { name: '视觉模型' }))
     await screen.findByDisplayValue('')
     await user.click(screen.getByRole('button', { name: '检查配置' }))
-    expect(screen.getByText('缺少：视觉模型')).toBeInTheDocument()
+    expect(screen.getByText('缺少：AI 模型、AI API Key')).toBeInTheDocument()
   })
   it('stores the unified AI API key through the secure bridge', async () => {
     const user = userEvent.setup()

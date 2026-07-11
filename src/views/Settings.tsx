@@ -105,13 +105,14 @@ export function Settings() {
 
   function missingFields() {
     if (active === 'ai') return [!String(settings.ai_base_url).trim() && 'Base URL', !String(settings.ai_model).trim() && '模型', !aiKeyConfigured && 'API Key'].filter(Boolean)
-    if (active === 'vision') return [!(String(settings.vision_model).trim() || (visionId === 'follow' && String(settings.ai_model).trim())) && '视觉模型', visionId !== 'follow' && !String(settings.vision_base_url).trim() && 'Base URL', visionId !== 'follow' && !visionKeyConfigured && !aiKeyConfigured && 'API Key'].filter(Boolean)
+    if (active === 'vision' && visionId === 'follow') return [!String(settings.ai_base_url).trim() && 'AI Base URL', !String(settings.ai_model).trim() && 'AI 模型', !aiKeyConfigured && 'AI API Key'].filter(Boolean)
+    if (active === 'vision') return [!String(settings.vision_model).trim() && '视觉模型', !String(settings.vision_base_url).trim() && 'Base URL', !visionKeyConfigured && !aiKeyConfigured && 'API Key'].filter(Boolean)
     if (active === 'image' && imagePreset.kind === 'openai') return [!String(settings.image_base_url).trim() && 'Base URL', !String(settings.image_model).trim() && '模型', !aiKeyConfigured && 'API Key'].filter(Boolean)
     if (active === 'image' && imagePreset.kind === 'sd-webui') return [!String(settings.image_base_url).trim() && 'SD WebUI 地址'].filter(Boolean)
     return []
   }
 
-  const fingerprint = JSON.stringify([active, ...sectionKeys[active].map((key) => settings[key]), aiKeyConfigured, visionKeyConfigured, active === 'vision' ? settings.ai_model : null])
+  const fingerprint = JSON.stringify([active, ...sectionKeys[active].map((key) => settings[key]), aiKeyConfigured, visionKeyConfigured, active === 'vision' && visionId === 'follow' ? settings.ai_base_url : null, active === 'vision' && visionId === 'follow' ? settings.ai_model : null])
   const retryFailed = () => failed && void (failed[0] === 'launch_at_login' ? persistLaunchAtLogin(Boolean(failed[1].value)) : persist(failed[0], failed[1].value))
   const statusNode = failed ? <button type="button" className="settings-retry" onClick={retryFailed}>保存失败，点击重试</button> : <span>{sectionState === 'saving' ? '保存中…' : sectionState === 'saved' ? '已保存' : '尚未修改'}</span>
   const details = <div className="settings-detail"><h2>{active === 'ai' ? 'AI 服务' : active === 'vision' ? '视觉模型' : active === 'image' ? '图像生成' : '数据与应用'}</h2><p>{descriptions[active]}</p><div className="settings-save-summary">保存状态：{statusNode}</div>{active !== 'data' && <><button type="button" className="editor-action" onClick={() => { const missing = missingFields(); setCheckResult({ fingerprint, message: missing.length ? `缺少：${missing.join('、')}` : '配置完整' }) }}>检查配置</button>{checkResult?.fingerprint === fingerprint && <p role="status">{checkResult.message}</p>}</>}</div>
