@@ -17,7 +17,7 @@ export function GenerationSettingsPanel({ content, loading, providerId, params, 
     {caps.steps ? numberField('步数', 'steps', caps.steps.min, caps.steps.max) : null}
     {caps.samplers ? <label className="bench-param-field"><span>采样器</span><select aria-label="采样器" value={String(params.sampler ?? caps.samplers[0])} onChange={(e) => onParamsChange({ sampler: e.target.value })}>{caps.samplers.map((item) => <option key={item}>{item}</option>)}</select></label> : null}
     {caps.qualities ? <label className="bench-param-field"><span>质量</span><select aria-label="质量" value={String(params.quality ?? caps.qualities[0].id)} onChange={(e) => onParamsChange({ quality: e.target.value })}>{caps.qualities.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label> : null}
-    {numberField('数量', 'count', 1, caps.maxBatch)}
+    <label className="bench-param-field"><span>数量</span><input aria-label="数量" type="number" min={1} max={caps.maxBatch} value={params.count ?? 1} onChange={(e) => onParamsChange({ count: Math.max(1, Math.min(caps.maxBatch, Number(e.target.value) || 1)) })} /></label>
     <button className="generate-button generation-settings-action" disabled={loading || !content.trim()} type="button" onClick={onGenerate}>{loading ? '生成中...' : '生成'}</button>
   </div>
 }

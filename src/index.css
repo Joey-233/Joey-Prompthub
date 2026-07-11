@@ -912,6 +912,7 @@ button {
 .bench-param-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .generation-settings-action { position: sticky; bottom: 12px; width: 100%; margin-top: 6px; }
 .bench-prompt-search { width: 100%; margin: 8px 0 12px; }
+.bench-prompt-filters { display: flex; gap: 4px; margin-bottom: 10px; }
 
 .bench-prompt-list {
   align-content: start;

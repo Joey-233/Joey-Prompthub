@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 
 import { GenerationGrid } from '../components/test-bench/GenerationGrid'
@@ -12,6 +12,19 @@ import { useTestBenchStore } from '../stores/testBenchStore'
 
 export function TestBench() {
   const [activeCanvas, setActiveCanvas] = useState<'results' | 'history'>('results')
+  const resultTabRef = useRef<HTMLButtonElement>(null)
+  const historyTabRef = useRef<HTMLButtonElement>(null)
+  const selectCanvas = (canvas: 'results' | 'history') => {
+    setActiveCanvas(canvas)
+    ;(canvas === 'results' ? resultTabRef : historyTabRef).current?.focus()
+  }
+  const onTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    let next: 'results' | 'history' | null = null
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') next = activeCanvas === 'results' ? 'history' : 'results'
+    if (event.key === 'Home') next = 'results'
+    if (event.key === 'End') next = 'history'
+    if (next) { event.preventDefault(); selectCanvas(next) }
+  }
   const {
     prompts,
     selectedPromptId,
@@ -134,10 +147,10 @@ export function TestBench() {
           onSave={() => void saveDraft()}
         />
         <div className="bench-canvas-tabs" role="tablist" aria-label="生成画布">
-          <button role="tab" aria-selected={activeCanvas === 'results'} onClick={() => setActiveCanvas('results')}>本轮结果</button>
-          <button role="tab" aria-selected={activeCanvas === 'history'} onClick={() => setActiveCanvas('history')}>历史记录</button>
+          <button ref={resultTabRef} id="bench-results-tab" role="tab" aria-controls="bench-canvas-panel" aria-selected={activeCanvas === 'results'} tabIndex={activeCanvas === 'results' ? 0 : -1} onKeyDown={onTabKeyDown} onClick={() => setActiveCanvas('results')}>本轮结果</button>
+          <button ref={historyTabRef} id="bench-history-tab" role="tab" aria-controls="bench-canvas-panel" aria-selected={activeCanvas === 'history'} tabIndex={activeCanvas === 'history' ? 0 : -1} onKeyDown={onTabKeyDown} onClick={() => setActiveCanvas('history')}>历史记录</button>
         </div>
-        <section className="bench-result-canvas">
+        <section id="bench-canvas-panel" className="bench-result-canvas" role="tabpanel" aria-labelledby={activeCanvas === 'results' ? 'bench-results-tab' : 'bench-history-tab'}>
         {generateError ? <div className="bench-error" role="alert"><span>{generateError}</span><button type="button" onClick={() => { setActiveCanvas('results'); void generate() }}>重试生成</button></div> : null}
         {activeCanvas === 'history' ? <HistoryPanel
           history={visibleHistory}

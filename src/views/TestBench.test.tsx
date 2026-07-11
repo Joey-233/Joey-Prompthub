@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -55,6 +55,39 @@ describe('TestBench', () => {
     expect(screen.queryByText('点击「生成」后图像会出现在这里')).not.toBeInTheDocument()
   })
 
+  it('implements keyboard-operable tabs with a shared labelled tabpanel', async () => {
+    const user = userEvent.setup()
+    window.promptHub.prompts.list = vi.fn().mockResolvedValue(imagePrompts)
+    render(<TestBench />)
+    const results = await screen.findByRole('tab', { name: '本轮结果' })
+    const history = screen.getByRole('tab', { name: '历史记录' })
+    results.focus()
+    await user.keyboard('{ArrowRight}')
+    expect(history).toHaveFocus()
+    expect(history).toHaveAttribute('tabindex', '0')
+    const panel = screen.getByRole('tabpanel')
+    expect(history).toHaveAttribute('aria-controls', panel.id)
+    expect(panel).toHaveAttribute('aria-labelledby', history.id)
+    await user.keyboard('{Home}')
+    expect(results).toHaveFocus()
+    await user.keyboard('{End}')
+    expect(history).toHaveFocus()
+  })
+
+  it('returns to results when generating from history and preserves history scope', async () => {
+    const user = userEvent.setup()
+    window.promptHub.prompts.list = vi.fn().mockResolvedValue(imagePrompts)
+    window.promptHub.generations.create = vi.fn().mockResolvedValue(null)
+    window.promptHub.prompts.update = vi.fn().mockImplementation(async (id, patch) => ({ ...imagePrompts.find((prompt) => prompt.id === id)!, ...patch }))
+    render(<TestBench />)
+    await user.click(await screen.findByRole('tab', { name: '历史记录' }))
+    await user.click(screen.getByRole('button', { name: '全部历史' }))
+    await user.click(screen.getByRole('button', { name: '生成' }))
+    expect(screen.getByRole('tab', { name: '本轮结果' })).toHaveAttribute('aria-selected', 'true')
+    await user.click(screen.getByRole('tab', { name: '历史记录' }))
+    expect(screen.getByRole('button', { name: '全部历史' })).toHaveAttribute('data-active', 'true')
+  })
+
   it('keeps successful results visible when a later generation fails and retries', async () => {
     const user = userEvent.setup()
     window.promptHub.prompts.list = vi.fn().mockResolvedValue(imagePrompts)
@@ -69,9 +102,22 @@ describe('TestBench', () => {
     window.promptHub.generations.create = vi.fn().mockRejectedValue(new Error('write failed'))
     await user.click(screen.getByRole('button', { name: '生成' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('write failed')
+    expect(within(screen.getByRole('main', { name: '生成结果' })).getByRole('alert')).toBeInTheDocument()
     expect(screen.getAllByAltText('赛博朋克街景')).toHaveLength(3)
+    expect(screen.getByRole('button', { name: '生成' })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: '重试生成' }))
     expect(window.promptHub.generations.create).toHaveBeenCalled()
+  })
+  it('retries a failed draft save', async () => {
+    const user = userEvent.setup()
+    window.promptHub.prompts.list = vi.fn().mockResolvedValue(imagePrompts)
+    window.promptHub.prompts.update = vi.fn().mockRejectedValueOnce(new Error('save failed')).mockImplementation(async (id, patch) => ({ ...imagePrompts.find((prompt) => prompt.id === id)!, ...patch }))
+    render(<TestBench />)
+    const editor = await screen.findByDisplayValue('cyberpunk street scene')
+    await user.type(editor, ' changed')
+    await user.click(screen.getByRole('button', { name: '保存回提示词库' }))
+    await user.click(await screen.findByRole('button', { name: '重试保存' }))
+    expect(window.promptHub.prompts.update).toHaveBeenCalledTimes(2)
   })
   it('loads an image prompt into the workbench and shows generated mock results', async () => {
     const user = userEvent.setup()
@@ -169,6 +215,7 @@ describe('TestBench', () => {
     await user.click(await screen.findByRole('button', { name: '恢复历史：赛博朋克街景' }))
 
     expect(screen.getByDisplayValue('restored prompt snapshot')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '本轮结果' })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('shows deleted-source history as restorable content', async () => {
