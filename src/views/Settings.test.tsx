@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -73,6 +73,66 @@ describe('Settings', () => {
     expect(screen.getByText('缺少：API Key')).toBeInTheDocument()
     expect(window.promptHub.image.openaiGenerate).not.toHaveBeenCalled()
   })
+
+  it('hides a stale configuration result after relevant values change', async () => {
+    const user = userEvent.setup()
+    window.promptHub.secure.has = vi.fn().mockResolvedValue(true)
+    render(<Settings />)
+    await screen.findByText('已加密保存')
+    await user.click(screen.getByRole('button', { name: '检查配置' }))
+    expect(screen.getByText('配置完整')).toBeInTheDocument()
+    await act(async () => fireEvent.change(screen.getByLabelText('默认模型'), { target: { value: '' } }))
+    expect(screen.queryByText('配置完整')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '检查配置' }))
+    expect(screen.getByText('缺少：模型')).toBeInTheDocument()
+    await act(async () => fireEvent.change(screen.getByLabelText('默认模型'), { target: { value: 'restored' } }))
+    expect(screen.queryByText('缺少：模型')).not.toBeInTheDocument()
+  })
+
+  it('retries both persistence targets when launch-at-login OS update fails', async () => {
+    const user = userEvent.setup()
+    window.promptHub.system.setLaunchAtLogin = vi.fn().mockRejectedValueOnce(new Error('denied')).mockResolvedValue(undefined)
+    window.promptHub.settings.set = vi.fn().mockResolvedValue(undefined)
+    render(<Settings />)
+    await user.click(screen.getByRole('button', { name: '数据与应用' }))
+    await user.click(screen.getByLabelText('开机自启'))
+    const retry = await within(screen.getByRole('region', { name: '设置内容' })).findByRole('button', { name: '保存失败，点击重试' })
+    await user.click(retry)
+    expect(window.promptHub.settings.set).toHaveBeenCalledTimes(2)
+    expect(window.promptHub.settings.set).toHaveBeenLastCalledWith('launch_at_login', true)
+    expect(window.promptHub.system.setLaunchAtLogin).toHaveBeenCalledTimes(2)
+    expect(window.promptHub.system.setLaunchAtLogin).toHaveBeenLastCalledWith(true)
+  })
+
+  it('reports launch-at-login failure when the settings write rejects', async () => {
+    const user = userEvent.setup()
+    window.promptHub.settings.set = vi.fn().mockRejectedValue(new Error('disk full'))
+    window.promptHub.system.setLaunchAtLogin = vi.fn().mockResolvedValue(undefined)
+    render(<Settings />)
+    await user.click(screen.getByRole('button', { name: '数据与应用' }))
+    await user.click(screen.getByLabelText('开机自启'))
+    expect(await within(screen.getByRole('region', { name: '设置内容' })).findByRole('button', { name: '保存失败，点击重试' })).toBeInTheDocument()
+    expect(window.promptHub.system.setLaunchAtLogin).toHaveBeenCalledWith(true)
+  })
+
+  it('accepts an empty vision override when follow mode has an AI fallback model', async () => {
+    const user = userEvent.setup()
+    window.promptHub.secure.has = vi.fn().mockResolvedValue(true)
+    render(<Settings />)
+    await user.click(screen.getByRole('button', { name: '视觉模型' }))
+    await user.click(screen.getByRole('button', { name: '检查配置' }))
+    expect(screen.getByText('配置完整')).toBeInTheDocument()
+  })
+
+  it('reports a missing vision model when follow mode has no override or AI fallback', async () => {
+    const user = userEvent.setup()
+    window.promptHub.settings.list = vi.fn().mockResolvedValue({ ai_model: '', vision_model: '', vision_preset: 'follow' })
+    render(<Settings />)
+    await user.click(screen.getByRole('button', { name: '视觉模型' }))
+    await screen.findByDisplayValue('')
+    await user.click(screen.getByRole('button', { name: '检查配置' }))
+    expect(screen.getByText('缺少：视觉模型')).toBeInTheDocument()
+  })
   it('stores the unified AI API key through the secure bridge', async () => {
     const user = userEvent.setup()
     const secureSet = vi.fn().mockResolvedValue(undefined)
@@ -82,6 +142,7 @@ describe('Settings', () => {
     render(<Settings />)
 
     // 重构后所有预设共用一个 ai.apiKey；UI label 改成通用「API Key」
+    await waitFor(() => expect(screen.getByLabelText('API Key')).toBeEnabled())
     await user.type(screen.getByLabelText('API Key'), 'sk-test-key')
     await user.click(screen.getByRole('button', { name: '保存 API Key' }))
 

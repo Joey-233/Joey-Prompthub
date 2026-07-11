@@ -1,103 +1,66 @@
 import { useEffect, useRef, useState } from 'react'
 
-export function SecretField({
-  label,
-  storageKey,
-  actionLabel,
-  onConfiguredChange
-}: {
-  label: string
-  storageKey: string
-  actionLabel: string
-  onConfiguredChange?: (configured: boolean) => void
-}) {
+export function SecretField({ label, storageKey, actionLabel, onConfiguredChange }: { label: string; storageKey: string; actionLabel: string; onConfiguredChange?: (configured: boolean) => void }) {
   const [value, setValue] = useState('')
-  const [status, setStatus] = useState('未配置')
-  const [justSaved, setJustSaved] = useState(false)
+  const [status, setStatus] = useState('读取中…')
+  const [configured, setConfigured] = useState(false)
   const [revealed, setRevealed] = useState<string | null>(null)
-  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [pending, setPending] = useState(true)
+  const mounted = useRef(false)
+  const operation = useRef(0)
+
+  function publish(nextConfigured: boolean, nextStatus: string) {
+    setConfigured(nextConfigured)
+    setStatus(nextStatus)
+    onConfiguredChange?.(nextConfigured)
+  }
 
   useEffect(() => {
+    mounted.current = true
+    const sequence = ++operation.current
+    setPending(true)
     void window.promptHub.secure.has(storageKey).then((hasValue) => {
-      setStatus(hasValue ? '已加密保存' : '未配置')
-      onConfiguredChange?.(hasValue)
-    }).catch(() => setStatus('读取失败'))
+      if (!mounted.current || operation.current !== sequence) return
+      publish(hasValue, hasValue ? '已加密保存' : '未配置')
+    }).catch(() => {
+      if (mounted.current && operation.current === sequence) setStatus('读取失败，请重试')
+    }).finally(() => {
+      if (mounted.current && operation.current === sequence) setPending(false)
+    })
     return () => {
-      if (feedbackTimer.current) clearTimeout(feedbackTimer.current)
+      mounted.current = false
+      operation.current += 1
     }
   }, [storageKey])
 
-  async function handleSave() {
-    if (!value.trim()) {
-      return
-    }
-
+  async function run(action: () => Promise<void>, onSuccess: () => void, error: string) {
+    if (pending) return
+    const sequence = ++operation.current
+    setPending(true)
     try {
-      await window.promptHub.secure.set(storageKey, value.trim())
-      setValue('')
-      setStatus('已加密保存')
-      onConfiguredChange?.(true)
-      setJustSaved(true)
+      await action()
+      if (mounted.current && operation.current === sequence) onSuccess()
     } catch {
-      setStatus('保存失败，请重试')
-      return
-    }
-    if (feedbackTimer.current) clearTimeout(feedbackTimer.current)
-    feedbackTimer.current = setTimeout(() => setJustSaved(false), 3000)
-  }
-
-  async function handleClear() {
-    try {
-      await window.promptHub.secure.delete(storageKey)
-      setValue('')
-      setStatus('未配置')
-      onConfiguredChange?.(false)
-      setJustSaved(false)
-    } catch {
-      setStatus('清除失败，请重试')
+      if (mounted.current && operation.current === sequence) setStatus(error)
+    } finally {
+      if (mounted.current && operation.current === sequence) setPending(false)
     }
   }
 
-  async function handleReveal() {
-    if (revealed !== null) {
-      setRevealed(null)
-      return
-    }
-    try {
-      setRevealed((await window.promptHub.secure.reveal(storageKey)) ?? '')
-    } catch {
-      setStatus('读取失败，请重试')
-    }
+  function handleSave() {
+    const next = value.trim()
+    if (!next) return
+    void run(() => window.promptHub.secure.set(storageKey, next), () => { setValue(''); setRevealed(null); publish(true, '✓ 已加密保存到本地') }, '保存失败，请重试')
   }
 
-  return (
-    <div className="secret-field">
-      <label className="field">
-        <span className="field-label">{label}</span>
-        <input
-          aria-label={label}
-          className="field-input"
-          placeholder="sk-..."
-          type="password"
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-        />
-      </label>
-      <div className="secret-actions">
-        <span className="secret-status" data-state={status === '已加密保存' ? 'set' : 'unset'}>
-          {justSaved ? '✓ 已加密保存到本地' : status}
-        </span>
-        {status === '已加密保存' ? (
-          <>
-            <button className="editor-action" type="button" onClick={() => void handleReveal()}>{revealed === null ? '显示' : '隐藏'}</button>
-            <button className="editor-action editor-action-danger" type="button" onClick={() => void handleClear()}>清除</button>
-          </>
-        ) : null}
-        <button className="editor-action" type="button" onClick={() => void handleSave()}>
-          {actionLabel}
-        </button>
-      </div>
-      {revealed !== null ? <output className="secret-reveal" aria-label={`${label} 当前值`}>{revealed || '空'}</output> : null}
-    </div>
-  )
+  function handleClear() {
+    void run(() => window.promptHub.secure.delete(storageKey), () => { setValue(''); setRevealed(null); publish(false, '未配置') }, '清除失败，请重试')
+  }
+
+  function handleReveal() {
+    if (revealed !== null) { setRevealed(null); return }
+    void run(async () => { const secret = await window.promptHub.secure.reveal(storageKey); if (mounted.current) setRevealed(secret ?? '') }, () => undefined, '读取失败，请重试')
+  }
+
+  return <div className="secret-field"><label className="field"><span className="field-label">{label}</span><input aria-label={label} className="field-input" placeholder="sk-..." type="password" value={value} disabled={pending} onChange={(event) => setValue(event.target.value)}/></label><div className="secret-actions"><span className="secret-status" data-state={configured ? 'set' : 'unset'}>{status}</span>{configured && <><button className="editor-action" type="button" disabled={pending} onClick={handleReveal}>{revealed === null ? '显示' : '隐藏'}</button><button className="editor-action editor-action-danger" type="button" disabled={pending} onClick={handleClear}>清除</button></>}<button className="editor-action" type="button" disabled={pending} onClick={handleSave}>{actionLabel}</button></div>{revealed !== null && <output className="secret-reveal" aria-label={`${label} 当前值`}>{revealed || '空'}</output>}</div>
 }

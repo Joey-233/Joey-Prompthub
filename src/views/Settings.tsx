@@ -21,7 +21,7 @@ export function Settings() {
   const [statuses, setStatuses] = useState<Record<string, SaveState>>({})
   const [aiKeyConfigured, setAiKeyConfigured] = useState(false)
   const [visionKeyConfigured, setVisionKeyConfigured] = useState(false)
-  const [checkResult, setCheckResult] = useState<string | null>(null)
+  const [checkResult, setCheckResult] = useState<{ fingerprint: string; message: string } | null>(null)
   const edited = useRef(new Set<string>())
   const versions = useRef<Record<string, number>>({})
 
@@ -45,6 +45,21 @@ export function Settings() {
     setStatuses((current) => ({ ...current, [key]: { state: 'saving', value } }))
     try {
       await window.promptHub.settings.set(key, value)
+      if (versions.current[key] === version) setStatuses((current) => ({ ...current, [key]: { state: 'saved', value } }))
+    } catch {
+      if (versions.current[key] === version) setStatuses((current) => ({ ...current, [key]: { state: 'error', value } }))
+    }
+  }
+
+  async function persistLaunchAtLogin(value: boolean) {
+    const key = 'launch_at_login'
+    edited.current.add(key)
+    setSettings((current) => ({ ...current, [key]: value }))
+    const version = (versions.current[key] ?? 0) + 1
+    versions.current[key] = version
+    setStatuses((current) => ({ ...current, [key]: { state: 'saving', value } }))
+    try {
+      await Promise.all([window.promptHub.settings.set(key, value), window.promptHub.system.setLaunchAtLogin(value)])
       if (versions.current[key] === version) setStatuses((current) => ({ ...current, [key]: { state: 'saved', value } }))
     } catch {
       if (versions.current[key] === version) setStatuses((current) => ({ ...current, [key]: { state: 'error', value } }))
@@ -90,20 +105,22 @@ export function Settings() {
 
   function missingFields() {
     if (active === 'ai') return [!String(settings.ai_base_url).trim() && 'Base URL', !String(settings.ai_model).trim() && '模型', !aiKeyConfigured && 'API Key'].filter(Boolean)
-    if (active === 'vision') return [!String(settings.vision_model).trim() && '视觉模型', visionId !== 'follow' && !String(settings.vision_base_url).trim() && 'Base URL', visionId !== 'follow' && !visionKeyConfigured && !aiKeyConfigured && 'API Key'].filter(Boolean)
+    if (active === 'vision') return [!(String(settings.vision_model).trim() || (visionId === 'follow' && String(settings.ai_model).trim())) && '视觉模型', visionId !== 'follow' && !String(settings.vision_base_url).trim() && 'Base URL', visionId !== 'follow' && !visionKeyConfigured && !aiKeyConfigured && 'API Key'].filter(Boolean)
     if (active === 'image' && imagePreset.kind === 'openai') return [!String(settings.image_base_url).trim() && 'Base URL', !String(settings.image_model).trim() && '模型', !aiKeyConfigured && 'API Key'].filter(Boolean)
     if (active === 'image' && imagePreset.kind === 'sd-webui') return [!String(settings.image_base_url).trim() && 'SD WebUI 地址'].filter(Boolean)
     return []
   }
 
-  const statusNode = failed ? <button type="button" className="settings-retry" onClick={() => void persist(failed[0], failed[1].value)}>保存失败，点击重试</button> : <span>{sectionState === 'saving' ? '保存中…' : sectionState === 'saved' ? '已保存' : '尚未修改'}</span>
-  const details = <div className="settings-detail"><h2>{active === 'ai' ? 'AI 服务' : active === 'vision' ? '视觉模型' : active === 'image' ? '图像生成' : '数据与应用'}</h2><p>{descriptions[active]}</p><div className="settings-save-summary">保存状态：{statusNode}</div>{active !== 'data' && <><button type="button" className="editor-action" onClick={() => { const missing = missingFields(); setCheckResult(missing.length ? `缺少：${missing.join('、')}` : '配置完整') }}>检查配置</button>{checkResult && <p role="status">{checkResult}</p>}</>}</div>
+  const fingerprint = JSON.stringify([active, ...sectionKeys[active].map((key) => settings[key]), aiKeyConfigured, visionKeyConfigured, active === 'vision' ? settings.ai_model : null])
+  const retryFailed = () => failed && void (failed[0] === 'launch_at_login' ? persistLaunchAtLogin(Boolean(failed[1].value)) : persist(failed[0], failed[1].value))
+  const statusNode = failed ? <button type="button" className="settings-retry" onClick={retryFailed}>保存失败，点击重试</button> : <span>{sectionState === 'saving' ? '保存中…' : sectionState === 'saved' ? '已保存' : '尚未修改'}</span>
+  const details = <div className="settings-detail"><h2>{active === 'ai' ? 'AI 服务' : active === 'vision' ? '视觉模型' : active === 'image' ? '图像生成' : '数据与应用'}</h2><p>{descriptions[active]}</p><div className="settings-save-summary">保存状态：{statusNode}</div>{active !== 'data' && <><button type="button" className="editor-action" onClick={() => { const missing = missingFields(); setCheckResult({ fingerprint, message: missing.length ? `缺少：${missing.join('、')}` : '配置完整' }) }}>检查配置</button>{checkResult?.fingerprint === fingerprint && <p role="status">{checkResult.message}</p>}</>}</div>
 
   let main
   if (active === 'ai') main = <SettingsSection title="AI 服务" description="OpenAI 兼容服务的常用配置。" status={statusNode}><ProviderSelect label="服务商预设" value={String(settings.ai_preset)} options={AI_PRESETS.map(({ id, label }) => ({ id, label }))} onChange={handleAiPreset}/><SecretField label="API Key" storageKey="ai.apiKey" actionLabel="保存 API Key" onConfiguredChange={setAiKeyConfigured}/><details className="settings-advanced" open><summary>高级设置</summary><label className="field"><span className="field-label">API Base URL</span><input className="field-input" disabled={!aiPreset.baseUrlEditable && Boolean(aiPreset.baseURL)} value={String(settings.ai_base_url)} onChange={(event) => void persist('ai_base_url', event.target.value)}/></label><label className="field"><span className="field-label">默认模型</span><input className="field-input" list="ai-model-suggestions" value={String(settings.ai_model)} onChange={(event) => void persist('ai_model', event.target.value)}/><datalist id="ai-model-suggestions">{aiPreset.suggestedModels.map((model) => <option key={model} value={model}/>)}</datalist></label></details></SettingsSection>
   else if (active === 'vision') main = <SettingsSection title="视觉模型" description="跟随 AI 服务或使用独立视觉服务。" status={statusNode}><ProviderSelect label="识图服务来源" value={visionId} options={[{ id: 'follow', label: '跟随 AI 服务' }, ...AI_PRESETS.map(({ id, label }) => ({ id, label }))]} onChange={handleVisionPreset}/><label className="field"><span className="field-label">识图模型</span><input className="field-input" value={String(settings.vision_model)} onChange={(event) => void persist('vision_model', event.target.value)}/></label>{visionPreset && <><details className="settings-advanced" open><summary>高级设置</summary><label className="field"><span className="field-label">识图 API Base URL</span><input className="field-input" disabled={!visionPreset.baseUrlEditable && Boolean(visionPreset.baseURL)} value={String(settings.vision_base_url)} onChange={(event) => void persist('vision_base_url', event.target.value)}/></label></details><SecretField label="识图 API Key（可留空）" storageKey="vision.apiKey" actionLabel="保存识图 Key" onConfiguredChange={setVisionKeyConfigured}/></>}</SettingsSection>
   else if (active === 'image') main = <SettingsSection title="图像生成" description="测试台使用的图像服务。" status={statusNode}><ProviderSelect label="服务商预设" value={String(settings.image_preset)} options={IMAGE_PRESETS.map(({ id, label }) => ({ id, label }))} onChange={handleImagePreset}/>{imagePreset.kind !== 'mock' && <details className="settings-advanced" open><summary>高级设置</summary><label className="field"><span className="field-label">{imagePreset.kind === 'sd-webui' ? 'SD WebUI 地址' : 'API Base URL'}</span><input className="field-input" disabled={imagePreset.kind === 'openai' && !imagePreset.baseUrlEditable && Boolean(imagePreset.baseURL)} value={String(settings.image_base_url)} onChange={(event) => void persist('image_base_url', event.target.value)}/></label>{imagePreset.kind === 'openai' && <label className="field"><span className="field-label">图像模型</span><input className="field-input" value={String(settings.image_model)} onChange={(event) => void persist('image_model', event.target.value)}/></label>}</details>}</SettingsSection>
-  else main = <SettingsSection title="数据与应用" description="备份以及桌面偏好。" status={statusNode}><ImportExportPanel/><ProviderSelect label="主题模式" value={String(settings.theme_mode)} options={[{ id: 'light', label: '亮色' }, { id: 'dark', label: '暗色' }, { id: 'system', label: '跟随系统' }]} onChange={(value) => void persist('theme_mode', value)}/><label className="settings-toggle"><input checked={Boolean(settings.launch_at_login)} type="checkbox" onChange={(event) => { const value = event.target.checked; void persist('launch_at_login', value); void window.promptHub.system.setLaunchAtLogin(value).catch(() => undefined) }}/><span>开机自启</span></label></SettingsSection>
+  else main = <SettingsSection title="数据与应用" description="备份以及桌面偏好。" status={statusNode}><ImportExportPanel/><ProviderSelect label="主题模式" value={String(settings.theme_mode)} options={[{ id: 'light', label: '亮色' }, { id: 'dark', label: '暗色' }, { id: 'system', label: '跟随系统' }]} onChange={(value) => void persist('theme_mode', value)}/><label className="settings-toggle"><input checked={Boolean(settings.launch_at_login)} type="checkbox" onChange={(event) => void persistLaunchAtLogin(event.target.checked)}/><span>开机自启</span></label></SettingsSection>
 
   return <WorkspaceLayout resource={<SettingsNav active={active} onSelect={(category) => { setActive(category); setCheckResult(null) }}/>} resourceLabel="设置分类" main={<div className="settings-layout" role="region" aria-label="设置内容">{main}</div>} detail={details} detailLabel="配置状态与帮助"/>
 }
