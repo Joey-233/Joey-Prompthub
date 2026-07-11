@@ -21,10 +21,12 @@ export function NavRail() {
             type="button"
             key={view}
             aria-label={label}
+            aria-describedby={`nav-tooltip-${view}`}
             aria-current={currentView === view ? 'page' : undefined}
             onClick={() => setCurrentView(view)}
           >
             <span aria-hidden="true">{icon}</span>
+            <span className="nav-rail-tooltip" id={`nav-tooltip-${view}`} role="tooltip">{label}</span>
           </button>
         ))}
       </div>

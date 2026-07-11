@@ -52,6 +52,18 @@ describe('App shell', () => {
     expect(screen.getByRole('heading', { name: '设置', level: 1 })).toBeInTheDocument()
   })
 
+  it('associates every compact navigation button with its full text tooltip', () => {
+    render(<App />)
+
+    for (const label of ['提示词库', '测试台', 'Seedance2', '设置']) {
+      const button = screen.getByRole('button', { name: label })
+      const tooltipId = button.getAttribute('aria-describedby')
+      expect(tooltipId).toBeTruthy()
+      expect(document.getElementById(tooltipId!)).toHaveTextContent(label)
+      expect(document.getElementById(tooltipId!)).toHaveAttribute('role', 'tooltip')
+    }
+  })
+
   it('opens the selected image prompt in the test bench from the library editor', async () => {
     const user = userEvent.setup()
 

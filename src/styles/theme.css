@@ -8,8 +8,8 @@
   --pv-space-1: 8px;
   --pv-space-2: 12px;
   --pv-space-3: 16px;
-  --pv-radius-sm: 8px;
-  --pv-radius-md: 12px;
+  --pv-radius-control: 8px;
+  --pv-radius-panel: 12px;
   --pv-nav-width: 58px;
   --pv-command-height: 48px;
 }
