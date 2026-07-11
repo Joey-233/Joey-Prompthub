@@ -28,9 +28,9 @@ export function LibrarySidebar() {
       {TYPE_TAGS.map((tag) => <span key={tag}>{tagButton(tag)}</span>)}
     </div>
     <div className="library-sidebar-section" aria-label="快捷视图">
-      <button className="library-nav-item" data-active={sortMode === 'favorites'} type="button" onClick={() => setSortMode('favorites')}>已收藏</button>
-      <button className="library-nav-item" data-active={sortMode === 'recent-used'} type="button" onClick={() => setSortMode('recent-used')}>最近使用</button>
-      <button className="library-nav-item" data-active={sortMode === 'recent-generated'} type="button" onClick={() => setSortMode('recent-generated')}>最近生成</button>
+      <button aria-pressed={sortMode === 'favorites'} className="library-nav-item" data-active={sortMode === 'favorites'} type="button" onClick={() => setSortMode('favorites')}>已收藏</button>
+      <button aria-pressed={sortMode === 'recent-used'} className="library-nav-item" data-active={sortMode === 'recent-used'} type="button" onClick={() => setSortMode('recent-used')}>最近使用</button>
+      <button aria-pressed={sortMode === 'recent-generated'} className="library-nav-item" data-active={sortMode === 'recent-generated'} type="button" onClick={() => setSortMode('recent-generated')}>最近生成</button>
     </div>
     <div className="library-sidebar-section library-sidebar-tags" role="tablist" aria-label="标签筛选">
       {tags.filter(([tag]) => !TYPE_TAGS.includes(tag as (typeof TYPE_TAGS)[number])).map(([tag]) => <span key={tag}>{tagButton(tag)}</span>)}

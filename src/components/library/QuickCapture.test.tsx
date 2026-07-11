@@ -67,6 +67,32 @@ describe('QuickCapture tag entry', () => {
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ content: '快捷保存' }))
   })
 
+  it('stays expanded while focus moves between capture controls', async () => {
+    const user = userEvent.setup()
+    render(<QuickCapture />)
+    const panel = screen.getByLabelText('快速录入').closest('form')!
+    await user.click(screen.getByLabelText('快速录入'))
+    await user.click(screen.getByRole('button', { name: '绘图' }))
+    expect(panel).toHaveAttribute('data-expanded', 'true')
+    await user.click(screen.getByLabelText('添加标签'))
+    expect(panel).toHaveAttribute('data-expanded', 'true')
+  })
+
+  it('keeps tag-only capture expanded and collapses after the tag is cleared', async () => {
+    const user = userEvent.setup()
+    render(<QuickCapture />)
+    const capture = screen.getByLabelText('快速录入')
+    const panel = capture.closest('form')!
+    await user.click(capture)
+    const tagInput = screen.getByLabelText('添加标签')
+    await user.type(tagInput, '待整理{Enter}')
+    await user.click(document.body)
+    expect(panel).toHaveAttribute('data-expanded', 'true')
+    await user.click(screen.getByRole('button', { name: '移除标签 待整理' }))
+    await user.click(document.body)
+    expect(panel).toHaveAttribute('data-expanded', 'false')
+  })
+
   it('passes typed tags to createPrompt on save', async () => {
     const user = userEvent.setup()
     const create = vi.fn().mockResolvedValue(makePrompt({ id: 'new' }))

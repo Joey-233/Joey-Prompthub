@@ -181,4 +181,15 @@ describe('Library', () => {
       expect(screen.queryByRole('button', { name: '代码审查助手' })).not.toBeInTheDocument()
     })
   })
+
+  it('exposes active shortcut views with aria-pressed', async () => {
+    const user = userEvent.setup()
+    render(<Library />)
+    await screen.findByRole('button', { name: '赛博朋克街景' })
+    const favorites = screen.getByRole('button', { name: '已收藏' })
+    const recent = screen.getByRole('button', { name: '最近使用' })
+    expect(favorites).toHaveAttribute('aria-pressed', 'false')
+    await user.click(recent)
+    expect(recent).toHaveAttribute('aria-pressed', 'true')
+  })
 })

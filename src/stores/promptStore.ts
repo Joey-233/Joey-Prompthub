@@ -39,7 +39,35 @@ function isPromptRecord(value: unknown): value is PromptRecord {
 }
 
 export const usePromptStore = create<PromptState>((set, get) => {
-  const updateSequenceByPrompt = new Map<string, number>()
+  const fieldVersions = new Map<string, Map<keyof UpdatePromptInput, number>>()
+  let mutationEpoch = 0
+
+  async function mutatePrompt(id: string, patch: UpdatePromptInput) {
+    mutationEpoch += 1
+    const promptVersions = fieldVersions.get(id) ?? new Map<keyof UpdatePromptInput, number>()
+    fieldVersions.set(id, promptVersions)
+    const requestVersions = new Map<keyof UpdatePromptInput, number>()
+    for (const field of Object.keys(patch) as Array<keyof UpdatePromptInput>) {
+      const version = (promptVersions.get(field) ?? 0) + 1
+      promptVersions.set(field, version)
+      requestVersions.set(field, version)
+    }
+
+    const updated = await window.promptHub.prompts.update(id, patch)
+    const response = isPromptRecord(updated) ? updated : null
+    set((current) => ({
+      prompts: current.prompts.map((prompt) => {
+        if (prompt.id !== id) return prompt
+        const fields: UpdatePromptInput = {}
+        for (const [field, version] of requestVersions) {
+          if (promptVersions.get(field) !== version) continue
+          const value = response && field in response ? response[field as keyof PromptRecord] : patch[field]
+          Object.assign(fields, { [field]: value })
+        }
+        return { ...prompt, ...fields }
+      })
+    }))
+  }
 
   return ({
   prompts: [],
@@ -49,9 +77,14 @@ export const usePromptStore = create<PromptState>((set, get) => {
   search: '',
   selectedPromptId: null,
   async loadPrompts() {
+    const loadEpoch = mutationEpoch
     set({ loading: true })
     try {
       const prompts = await window.promptHub.prompts.list()
+      if (loadEpoch !== mutationEpoch) {
+        set({ loading: false })
+        return
+      }
       set((current) => ({
         prompts,
         loading: false,
@@ -66,26 +99,15 @@ export const usePromptStore = create<PromptState>((set, get) => {
     }
   },
   async createPrompt(input) {
+    mutationEpoch += 1
     await window.promptHub.prompts.create(input)
     await get().loadPrompts()
   },
   async updatePrompt(id, patch) {
-    const sequence = (updateSequenceByPrompt.get(id) ?? 0) + 1
-    updateSequenceByPrompt.set(id, sequence)
-    const updated = await window.promptHub.prompts.update(id, patch)
-
-    if (updateSequenceByPrompt.get(id) !== sequence) return
-
-    if (!isPromptRecord(updated)) {
-      await get().loadPrompts()
-      return
-    }
-
-    set((current) => ({
-      prompts: current.prompts.map((prompt) => (prompt.id === id ? updated : prompt))
-    }))
+    await mutatePrompt(id, patch)
   },
   async deletePrompt(id) {
+    mutationEpoch += 1
     await window.promptHub.prompts.delete(id)
     set((current) => {
       const prompts = current.prompts.filter((prompt) => prompt.id !== id)
@@ -97,15 +119,9 @@ export const usePromptStore = create<PromptState>((set, get) => {
     })
   },
   async toggleFavorite(prompt) {
-    const updated = await window.promptHub.prompts.update(prompt.id, {
+    await mutatePrompt(prompt.id, {
       isFavorite: !prompt.isFavorite
     })
-
-    set((current) => ({
-      prompts: current.prompts.map((item) =>
-        item.id === updated.id ? updated : item
-      )
-    }))
   },
   setFilterTag(filterTag) {
     set({ filterTag })
