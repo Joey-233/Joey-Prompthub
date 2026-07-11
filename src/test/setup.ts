@@ -51,6 +51,15 @@ beforeEach(() => {
             results: []
           })
         },
+        seedance2: {
+          listTemplates: vi.fn().mockResolvedValue([]),
+          createTemplate: vi.fn(),
+          updateTemplate: vi.fn(),
+          deleteTemplate: vi.fn(),
+          listPresets: vi.fn().mockResolvedValue([]),
+          createPreset: vi.fn(),
+          deletePreset: vi.fn()
+        },
         system: {
           clipboardImport: vi.fn().mockResolvedValue(null),
           openMainWindow: vi.fn(),
@@ -95,6 +104,7 @@ beforeEach(() => {
   useAppStore.setState({
     currentView: 'library',
     pendingTestBenchPromptId: null,
+    navigationGuard: null,
     layout: {
       resourceCollapsed: false,
       detailCollapsed: false,

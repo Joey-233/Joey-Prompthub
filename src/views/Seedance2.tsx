@@ -1,396 +1,100 @@
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent
-} from '@dnd-kit/core'
-import {
-  SortableContext,
-  arrayMove,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy
-} from '@dnd-kit/sortable'
-import { useEffect, useMemo, useState } from 'react'
+import { DndContext, closestCenter, type DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
-import type {
-  Seedance2PresetRecord,
-  Seedance2RefGroup,
-  Seedance2RefItem,
-  Seedance2Segment,
-  Seedance2TemplateData,
-  Seedance2TemplateRecord
-} from '../shared/types'
-
+import { WorkspaceLayout } from '../components/layout/WorkspaceLayout'
+import type { AppView } from '../stores/appStore'
+import { useAppStore } from '../stores/appStore'
+import type { Seedance2PresetRecord, Seedance2RefGroup, Seedance2RefItem, Seedance2Segment, Seedance2TemplateData, Seedance2TemplateRecord } from '../shared/types'
 import { SortableSegment } from './seedance2/SortableSegment'
 import { emptySegment, emptyTemplate, serializeTemplate } from './seedance2/serialize'
+import { UnsavedChangesDialog } from './seedance2/UnsavedChangesDialog'
 
 const api = () => window.promptHub.seedance2
+type PendingAction = { type: 'load'; template: Seedance2TemplateRecord } | { type: 'new' } | { type: 'delete' } | { type: 'navigate'; view: AppView }
+type Section = 'intro' | 'references' | 'shots' | 'style'
+const sectionNames: Record<Section, string> = { intro: '开篇总述', references: '参考资料', shots: '镜头序列', style: '风格' }
 
 export function Seedance2() {
   const [templates, setTemplates] = useState<Seedance2TemplateRecord[]>([])
   const [presets, setPresets] = useState<Seedance2PresetRecord[]>([])
   const [currentId, setCurrentId] = useState<string | null>(null)
-  const [draft, setDraft] = useState<Seedance2TemplateData>(emptyTemplate())
+  const [draft, setDraft] = useState<Seedance2TemplateData>(emptyTemplate)
   const [title, setTitle] = useState('未命名模板')
   const [dirty, setDirty] = useState(false)
-  const [showPresets, setShowPresets] = useState(true)
+  const [activeSection, setActiveSection] = useState<Section>('intro')
+  const [pending, setPending] = useState<PendingAction | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const setNavigationGuard = useAppStore((s) => s.setNavigationGuard)
+  const refs = useRef<Record<Section, HTMLElement | null>>({ intro: null, references: null, shots: null, style: null })
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  )
+  const reloadTemplates = useCallback(async () => { const list = await api().listTemplates(); setTemplates(list); return list }, [])
+  const reloadPresets = useCallback(async () => setPresets(await api().listPresets()), [])
+  useEffect(() => { void reloadTemplates(); void reloadPresets() }, [reloadPresets, reloadTemplates])
 
-  const reloadTemplates = async () => {
-    const list = await api().listTemplates()
-    setTemplates(list)
-    return list
-  }
-
-  const reloadPresets = async () => {
-    setPresets(await api().listPresets())
-  }
+  const load = useCallback((rec: Seedance2TemplateRecord) => { setCurrentId(rec.id); setTitle(rec.title); setDraft(rec.data); setDirty(false) }, [])
+  const createNew = useCallback(() => { setCurrentId(null); setTitle('未命名模板'); setDraft(emptyTemplate()); setDirty(true) }, [])
+  const request = useCallback((action: PendingAction) => { if (dirty) setPending(action); else perform(action) }, [dirty])
+  const perform = useCallback((action: PendingAction) => {
+    setPending(null); setSaveError(null)
+    if (action.type === 'load') load(action.template)
+    else if (action.type === 'new') createNew()
+    else if (action.type === 'navigate') { setNavigationGuard(null); useAppStore.getState().setCurrentView(action.view) }
+    else if (action.type === 'delete' && currentId) void api().deleteTemplate(currentId).then(async () => { await reloadTemplates(); setCurrentId(null); setTitle('未命名模板'); setDraft(emptyTemplate()); setDirty(false) })
+  }, [createNew, currentId, load, reloadTemplates, setNavigationGuard])
 
   useEffect(() => {
-    void reloadTemplates()
-    void reloadPresets()
-  }, [])
+    if (!dirty) { setNavigationGuard(null); return }
+    setNavigationGuard((view) => { setPending({ type: 'navigate', view }); return true })
+    return () => setNavigationGuard(null)
+  }, [dirty, setNavigationGuard])
 
-  const loadTemplate = (rec: Seedance2TemplateRecord) => {
-    setCurrentId(rec.id)
-    setTitle(rec.title)
-    setDraft(rec.data)
-    setDirty(false)
+  const save = async () => {
+    const rec = currentId
+      ? await api().updateTemplate(currentId, { title, data: draft })
+      : await api().createTemplate({ title, data: draft })
+    await reloadTemplates(); setCurrentId(rec.id); setDirty(false); return rec
   }
-
-  const handleNew = () => {
-    setCurrentId(null)
-    setTitle('未命名模板')
-    setDraft(emptyTemplate())
-    setDirty(true)
+  const saveAndContinue = async () => {
+    if (!pending) return
+    setSaving(true); setSaveError(null)
+    try { await save(); perform(pending) }
+    catch (error) { setSaveError(error instanceof Error ? error.message : '保存失败') }
+    finally { setSaving(false) }
   }
-
-  const handleSave = async () => {
-    if (currentId) {
-      const rec = await api().updateTemplate(currentId, { title, data: draft })
-      await reloadTemplates()
-      setCurrentId(rec.id)
-    } else {
-      const rec = await api().createTemplate({ title, data: draft })
-      await reloadTemplates()
-      setCurrentId(rec.id)
-    }
-    setDirty(false)
-  }
-
-  const handleDelete = async () => {
-    if (!currentId) return
-    if (!confirm(`删除模板「${title}」？`)) return
-    await api().deleteTemplate(currentId)
-    await reloadTemplates()
-    handleNew()
-  }
-
-  const patchDraft = (patch: Partial<Seedance2TemplateData>) => {
-    setDraft((prev) => ({ ...prev, ...patch }))
-    setDirty(true)
-  }
-
-  const updateSegment = (id: string, patch: Partial<Seedance2Segment>) => {
-    patchDraft({
-      segments: draft.segments.map((s) => (s.id === id ? { ...s, ...patch } : s))
-    })
-  }
-
-  const addSegment = () => {
-    patchDraft({ segments: [...draft.segments, emptySegment()] })
-  }
-
-  const deleteSegment = (id: string) => {
-    patchDraft({ segments: draft.segments.filter((s) => s.id !== id) })
-  }
-
-  const duplicateSegment = (id: string) => {
-    const idx = draft.segments.findIndex((s) => s.id === id)
-    if (idx < 0) return
-    const copy = { ...draft.segments[idx], id: crypto.randomUUID() }
-    const next = [...draft.segments]
-    next.splice(idx + 1, 0, copy)
-    patchDraft({ segments: next })
-  }
-
-  const handleDragEnd = (e: DragEndEvent) => {
-    const { active, over } = e
-    if (!over || active.id === over.id) return
-    const oldIdx = draft.segments.findIndex((s) => s.id === active.id)
-    const newIdx = draft.segments.findIndex((s) => s.id === over.id)
-    if (oldIdx < 0 || newIdx < 0) return
-    patchDraft({ segments: arrayMove(draft.segments, oldIdx, newIdx) })
-  }
-
-  const saveSegmentAsPreset = async (seg: Seedance2Segment) => {
-    const name = prompt('预设名称', seg.timeLabel || seg.shotType || '镜头预设')
-    if (!name) return
-    await api().createPreset({ name, segment: { ...seg, id: crypto.randomUUID() }, tags: [] })
-    await reloadPresets()
-  }
-
-  const insertPreset = (preset: Seedance2PresetRecord) => {
-    patchDraft({
-      segments: [...draft.segments, { ...preset.segment, id: crypto.randomUUID() }]
-    })
-  }
-
-  const deletePreset = async (id: string) => {
-    if (!confirm('删除该片段预设？')) return
-    await api().deletePreset(id)
-    await reloadPresets()
-  }
-
-  const updateRefGroup = (idx: number, patch: Partial<Seedance2RefGroup>) => {
-    patchDraft({
-      refGroups: draft.refGroups.map((g, i) => (i === idx ? { ...g, ...patch } : g))
-    })
-  }
-
-  const updateRefItem = (gIdx: number, iIdx: number, patch: Partial<Seedance2RefItem>) => {
-    updateRefGroup(gIdx, {
-      items: draft.refGroups[gIdx].items.map((it, i) => (i === iIdx ? { ...it, ...patch } : it))
-    })
-  }
-
-  const addRefItem = (gIdx: number) => {
-    updateRefGroup(gIdx, {
-      items: [
-        ...draft.refGroups[gIdx].items,
-        { emoji: '🖼', label: `图片${draft.refGroups[gIdx].items.length + 1}`, note: '' }
-      ]
-    })
-  }
-
-  const deleteRefItem = (gIdx: number, iIdx: number) => {
-    updateRefGroup(gIdx, { items: draft.refGroups[gIdx].items.filter((_, i) => i !== iIdx) })
-  }
-
-  const addRefGroup = () => {
-    patchDraft({
-      refGroups: [...draft.refGroups, { title: '新参考分组', description: '', items: [] }]
-    })
-  }
-
-  const deleteRefGroup = (idx: number) => {
-    patchDraft({ refGroups: draft.refGroups.filter((_, i) => i !== idx) })
-  }
-
+  const patchDraft = (patch: Partial<Seedance2TemplateData>) => { setDraft((prev) => ({ ...prev, ...patch })); setDirty(true) }
+  const updateSegment = (id: string, patch: Partial<Seedance2Segment>) => patchDraft({ segments: draft.segments.map((s) => s.id === id ? { ...s, ...patch } : s) })
+  const dragEnd = ({ active, over }: DragEndEvent) => { if (!over || active.id === over.id) return; const from = draft.segments.findIndex((s) => s.id === active.id); const to = draft.segments.findIndex((s) => s.id === over.id); if (from >= 0 && to >= 0) patchDraft({ segments: arrayMove(draft.segments, from, to) }) }
+  const updateRefGroup = (index: number, patch: Partial<Seedance2RefGroup>) => patchDraft({ refGroups: draft.refGroups.map((g, i) => i === index ? { ...g, ...patch } : g) })
+  const updateRefItem = (g: number, i: number, patch: Partial<Seedance2RefItem>) => updateRefGroup(g, { items: draft.refGroups[g].items.map((item, index) => index === i ? { ...item, ...patch } : item) })
+  const savePreset = async (segment: Seedance2Segment) => { const name = prompt('预设名称', segment.timeLabel || segment.shotType || '镜头预设'); if (!name) return; await api().createPreset({ name, segment: { ...segment, id: crypto.randomUUID() }, tags: [] }); await reloadPresets() }
   const preview = useMemo(() => serializeTemplate(draft), [draft])
 
-  const copyPreview = async () => {
-    await navigator.clipboard.writeText(preview)
-    alert('已复制到剪贴板')
-  }
+  const openSection = (section: Section) => { setActiveSection(section); requestAnimationFrame(() => { refs.current[section]?.scrollIntoView({ block: 'start' }); refs.current[section]?.querySelector<HTMLElement>('textarea, input, button')?.focus() }) }
+  const accordion = (section: Section, children: ReactNode) => <section ref={(node) => { refs.current[section] = node }} className="s2-accordion">
+    <h2><button type="button" aria-expanded={activeSection === section} aria-controls={`seedance-section-${section}`} onClick={() => openSection(section)}>{sectionNames[section]}</button></h2>
+    <div id={`seedance-section-${section}`} hidden={activeSection !== section}>{children}</div>
+  </section>
 
-  const segmentIds = draft.segments.map((s) => s.id)
+  const resource = <aside className="s2-resource" aria-label="Seedance2 资源">
+    <div role="tablist" aria-label="Seedance2 资源类型"><button role="tab" aria-selected="true">模板</button><button role="tab" aria-selected="false">预设</button></div>
+    <button type="button" className="s2-btn s2-btn-primary" onClick={() => request({ type: 'new' })}>+ 新建</button>
+    <h2>模板</h2>{templates.map((item) => <button type="button" className="s2-list-item" data-active={item.id === currentId} key={item.id} onClick={() => request({ type: 'load', template: item })}>{item.title}</button>)}
+    <h2>镜头预设</h2>{presets.map((preset) => <div className="s2-preset-item" key={preset.id}><button type="button" onClick={() => patchDraft({ segments: [...draft.segments, { ...preset.segment, id: crypto.randomUUID() }] })}>{preset.name}</button><button type="button" aria-label={`删除预设 ${preset.name}`} onClick={async () => { await api().deletePreset(preset.id); await reloadPresets() }}>×</button></div>)}
+  </aside>
 
-  return (
-    <section className="page-body s2-layout">
-      {/* 左：模板 / 预设列表 */}
-      <aside className="s2-aside">
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button type="button" className="s2-btn s2-btn-primary" style={{ flex: 1 }} onClick={handleNew}>
-            + 新建
-          </button>
-          <button type="button" className="s2-btn s2-btn-ghost" onClick={() => setShowPresets((v) => !v)}>
-            {showPresets ? '隐藏预设' : '显示预设'}
-          </button>
-        </div>
+  const main = <main className="s2-main" aria-label="Seedance2 编辑器">
+    <div className="s2-toolbar"><label><span className="sr-only">模板标题</span><input className="s2-input s2-title-input" value={title} onChange={(e) => { setTitle(e.target.value); setDirty(true) }} /></label><button className="s2-btn s2-btn-primary" disabled={!dirty && !!currentId} onClick={() => void save()}>{currentId ? '保存' : '保存为新模板'}</button>{currentId && <button className="s2-btn" onClick={() => request({ type: 'delete' })}>删除</button>}</div>
+    <nav className="s2-section-nav" aria-label="编辑器分区">{(Object.keys(sectionNames) as Section[]).map((section) => <button key={section} type="button" aria-current={activeSection === section ? 'true' : undefined} onClick={() => openSection(section)}>{sectionNames[section]}</button>)}</nav>
+    <div className="s2-editor-scroll">
+      {accordion('intro', <textarea aria-label="开篇总述内容" className="s2-textarea" rows={5} value={draft.intro} onChange={(e) => patchDraft({ intro: e.target.value })} />)}
+      {accordion('references', <><button className="s2-btn" onClick={() => patchDraft({ refGroups: [...draft.refGroups, { title: '新参考分组', description: '', items: [] }] })}>+ 参考分组</button>{draft.refGroups.map((group, g) => <div className="s2-ref-group" key={g}><input aria-label={`参考分组 ${g + 1} 标题`} className="s2-input" value={group.title} onChange={(e) => updateRefGroup(g, { title: e.target.value })} /><textarea className="s2-textarea" value={group.description} onChange={(e) => updateRefGroup(g, { description: e.target.value })} /><button className="s2-btn" onClick={() => updateRefGroup(g, { items: [...group.items, { emoji: '🖼️', label: `图片${group.items.length + 1}`, note: '' }] })}>+ 参考图</button><button className="s2-btn" onClick={() => patchDraft({ refGroups: draft.refGroups.filter((_, i) => i !== g) })}>删除分组</button>{group.items.map((item, i) => <div className="s2-ref-row" key={i}><input className="s2-input" value={item.emoji} onChange={(e) => updateRefItem(g, i, { emoji: e.target.value })} /><input className="s2-input" value={item.label} onChange={(e) => updateRefItem(g, i, { label: e.target.value })} /><input className="s2-input" value={item.note} onChange={(e) => updateRefItem(g, i, { note: e.target.value })} /><button onClick={() => updateRefGroup(g, { items: group.items.filter((_, x) => x !== i) })}>×</button></div>)}</div>)}</>)}
+      {accordion('shots', <><button className="s2-btn s2-btn-primary" onClick={() => patchDraft({ segments: [...draft.segments, emptySegment()] })}>+ 新增镜头</button><DndContext collisionDetection={closestCenter} onDragEnd={dragEnd}><SortableContext items={draft.segments.map((s) => s.id)} strategy={verticalListSortingStrategy}>{draft.segments.map((segment, index) => <SortableSegment key={segment.id} segment={segment} index={index} onChange={(patch) => updateSegment(segment.id, patch)} onDelete={() => patchDraft({ segments: draft.segments.filter((s) => s.id !== segment.id) })} onDuplicate={() => { const at = draft.segments.findIndex((s) => s.id === segment.id); const next = [...draft.segments]; next.splice(at + 1, 0, { ...segment, id: crypto.randomUUID() }); patchDraft({ segments: next }) }} onSaveAsPreset={() => void savePreset(segment)} />)}</SortableContext></DndContext><textarea aria-label="镜头序列底部说明" className="s2-textarea" value={draft.segmentsFooter} onChange={(e) => patchDraft({ segmentsFooter: e.target.value })} /></>)}
+      {accordion('style', <textarea aria-label="风格内容" className="s2-textarea" rows={6} value={draft.style} onChange={(e) => patchDraft({ style: e.target.value })} />)}
+    </div>
+  </main>
+  const detail = <aside className="s2-preview-wrap" aria-label="实时预览"><div className="s2-preview-header"><strong>实时预览</strong><button className="s2-btn s2-btn-primary" onClick={() => void navigator.clipboard.writeText(preview)}>复制</button></div><pre className="s2-preview">{preview}</pre></aside>
 
-        <div className="s2-aside-title">模板</div>
-        {templates.length === 0 && <div className="s2-list-empty">暂无</div>}
-        {templates.map((t) => (
-          <div
-            key={t.id}
-            className="s2-list-item"
-            data-active={t.id === currentId}
-            onClick={() => loadTemplate(t)}
-          >
-            {t.title}
-          </div>
-        ))}
-
-        {showPresets && (
-          <>
-            <div className="s2-aside-title" style={{ marginTop: 10 }}>片段预设</div>
-            {presets.length === 0 && <div className="s2-list-empty">暂无</div>}
-            {presets.map((p) => (
-              <div key={p.id} className="s2-preset-item">
-                <span className="s2-preset-item-name" onClick={() => insertPreset(p)} title="点击追加到末尾">
-                  {p.name}
-                </span>
-                <button type="button" className="s2-btn s2-btn-icon" onClick={() => void deletePreset(p.id)} title="删除预设">
-                  ×
-                </button>
-              </div>
-            ))}
-          </>
-        )}
-      </aside>
-
-      {/* 中：编辑区 */}
-      <div className="s2-main">
-        <div className="s2-toolbar">
-          <input
-            className="s2-input s2-title-input"
-            value={title}
-            onChange={(e) => {
-              setTitle(e.target.value)
-              setDirty(true)
-            }}
-            placeholder="模板标题"
-          />
-          <button
-            type="button"
-            className="s2-btn s2-btn-primary"
-            onClick={() => void handleSave()}
-            disabled={!dirty && !!currentId}
-          >
-            {currentId ? (dirty ? '保存修改*' : '已保存') : '保存为新模板'}
-          </button>
-          {currentId && (
-            <button type="button" className="s2-btn" onClick={() => void handleDelete()}>
-              删除
-            </button>
-          )}
-        </div>
-
-        <div className="s2-section">
-          <div className="s2-section-header">
-            <span className="s2-section-title">开篇总述</span>
-            <span className="s2-hint">视频整体氛围 / 时长 / 色调</span>
-          </div>
-          <textarea
-            className="s2-textarea"
-            value={draft.intro}
-            onChange={(e) => patchDraft({ intro: e.target.value })}
-            rows={3}
-          />
-        </div>
-
-        {draft.refGroups.map((group, gIdx) => (
-          <div key={gIdx} className="s2-section">
-            <div className="s2-section-header">
-              <input
-                className="s2-input"
-                value={group.title}
-                onChange={(e) => updateRefGroup(gIdx, { title: e.target.value })}
-                placeholder="分组标题"
-                style={{ flex: 1, fontWeight: 600 }}
-              />
-              <button type="button" className="s2-btn s2-btn-ghost" onClick={() => addRefItem(gIdx)}>
-                + 参考图
-              </button>
-              <button type="button" className="s2-btn s2-btn-ghost" onClick={() => deleteRefGroup(gIdx)}>
-                删除分组
-              </button>
-            </div>
-            <textarea
-              className="s2-textarea"
-              value={group.description}
-              onChange={(e) => updateRefGroup(gIdx, { description: e.target.value })}
-              rows={2}
-              placeholder="分组说明（可空，允许内嵌 🖐图片1 引用）"
-            />
-            {group.items.map((item, iIdx) => (
-              <div key={iIdx} className="s2-ref-row">
-                <input
-                  className="s2-input emoji"
-                  value={item.emoji}
-                  onChange={(e) => updateRefItem(gIdx, iIdx, { emoji: e.target.value })}
-                  placeholder="🖐"
-                />
-                <input
-                  className="s2-input label"
-                  value={item.label}
-                  onChange={(e) => updateRefItem(gIdx, iIdx, { label: e.target.value })}
-                  placeholder="图片1"
-                />
-                <input
-                  className="s2-input"
-                  value={item.note}
-                  onChange={(e) => updateRefItem(gIdx, iIdx, { note: e.target.value })}
-                  placeholder="说明"
-                  style={{ flex: 1 }}
-                />
-                <button type="button" className="s2-btn s2-btn-icon" onClick={() => deleteRefItem(gIdx, iIdx)}>
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        ))}
-        <div>
-          <button type="button" className="s2-btn" onClick={addRefGroup}>
-            + 参考分组
-          </button>
-        </div>
-
-        <div className="s2-section">
-          <div className="s2-section-header">
-            <span className="s2-section-title">镜头序列（可拖拽排序）</span>
-            <button type="button" className="s2-btn s2-btn-primary" onClick={addSegment}>
-              + 新增镜头
-            </button>
-          </div>
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={segmentIds} strategy={verticalListSortingStrategy}>
-              {draft.segments.map((seg, idx) => (
-                <SortableSegment
-                  key={seg.id}
-                  segment={seg}
-                  index={idx}
-                  onChange={(p) => updateSegment(seg.id, p)}
-                  onDelete={() => deleteSegment(seg.id)}
-                  onDuplicate={() => duplicateSegment(seg.id)}
-                  onSaveAsPreset={() => void saveSegmentAsPreset(seg)}
-                />
-              ))}
-            </SortableContext>
-          </DndContext>
-          <div>
-            <div className="s2-hint" style={{ marginBottom: 4 }}>序列底部说明</div>
-            <textarea
-              className="s2-textarea"
-              value={draft.segmentsFooter}
-              onChange={(e) => patchDraft({ segmentsFooter: e.target.value })}
-              rows={2}
-            />
-          </div>
-        </div>
-
-        <div className="s2-section">
-          <div className="s2-section-header">
-            <span className="s2-section-title">风格</span>
-          </div>
-          <textarea
-            className="s2-textarea"
-            value={draft.style}
-            onChange={(e) => patchDraft({ style: e.target.value })}
-            rows={4}
-          />
-        </div>
-      </div>
-
-      {/* 右：实时预览 */}
-      <aside className="s2-preview-wrap">
-        <div className="s2-preview-header">
-          <span className="s2-section-title">实时预览</span>
-          <button type="button" className="s2-btn s2-btn-primary" onClick={() => void copyPreview()}>
-            复制全文
-          </button>
-        </div>
-        <pre className="s2-preview">{preview}</pre>
-      </aside>
-    </section>
-  )
+  return <><WorkspaceLayout resource={resource} resourceLabel="Seedance2 资源" main={main} detail={detail} detailLabel="实时预览" />{pending && <UnsavedChangesDialog saving={saving} error={saveError} onSave={() => void saveAndContinue()} onDiscard={() => perform(pending)} onCancel={() => { setPending(null); setSaveError(null) }} />}</>
 }

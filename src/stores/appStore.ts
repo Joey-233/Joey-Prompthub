@@ -69,18 +69,22 @@ interface AppState {
   setPaneCollapsed: (pane: 'resource' | 'detail', collapsed: boolean) => void
   setPaneWidth: (pane: 'resource' | 'detail', width: number) => void
   resetLayout: () => void
+  navigationGuard: ((view: AppView) => boolean) | null
+  setNavigationGuard: (guard: ((view: AppView) => boolean) | null) => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
   currentView: 'library',
   pendingTestBenchPromptId: null,
   layout: readLayout(),
-  setCurrentView: (view) => set({ currentView: view, pendingTestBenchPromptId: null }),
+  navigationGuard: null,
+  setNavigationGuard: (guard) => set({ navigationGuard: guard }),
+  setCurrentView: (view) => set((state) => state.navigationGuard?.(view) ? state : { currentView: view, pendingTestBenchPromptId: null }),
   openTestBench: (promptId) =>
-    set({
+    set((state) => state.navigationGuard?.('test-bench') ? state : ({
       currentView: 'test-bench',
       pendingTestBenchPromptId: promptId ?? null
-    }),
+    })),
   clearPendingTestBenchPromptId: () => set({ pendingTestBenchPromptId: null }),
   setPaneCollapsed: (pane, collapsed) =>
     set((state) => {

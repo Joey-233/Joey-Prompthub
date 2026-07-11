@@ -1899,6 +1899,31 @@ html:has(#floating-root) body {
   word-break: break-word;
 }
 
+/* Seedance2 compact workspace */
+.s2-resource { display: flex; min-height: 0; height: 100%; flex-direction: column; gap: 8px; overflow: auto; padding: 10px; }
+.s2-resource [role='tablist'] { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.s2-resource [role='tab'], .s2-resource > .s2-list-item { border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 6px 8px; text-align: left; color: inherit; }
+.s2-main { display: flex; min-height: 0; height: 100%; flex-direction: column; overflow: hidden; padding: 0; }
+.s2-toolbar, .s2-section-nav { flex: none; background: var(--surface); }
+.s2-section-nav { position: sticky; top: 0; z-index: 2; display: flex; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.s2-section-nav button { border: 0; border-radius: 5px; background: transparent; padding: 5px 8px; color: var(--text-muted); }
+.s2-section-nav button[aria-current] { background: var(--accent-soft); color: var(--accent); }
+.s2-editor-scroll { min-height: 0; flex: 1; overflow: auto; padding: 8px 10px 24px; }
+.s2-accordion { margin-bottom: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.s2-accordion > h2 { margin: 0; }
+.s2-accordion > h2 > button { width: 100%; border: 0; background: transparent; padding: 8px 10px; text-align: left; color: inherit; font-weight: 650; }
+.s2-accordion > h2 > button::after { content: '▸'; float: right; }
+.s2-accordion > h2 > button[aria-expanded='true']::after { content: '▾'; }
+.s2-accordion > div { padding: 0 10px 10px; }
+.s2-preview-wrap { position: relative; display: flex; min-height: 0; height: 100%; flex-direction: column; overflow: hidden; padding: 0; }
+.s2-preview-header { position: sticky; top: 0; z-index: 2; flex: none; padding: 8px 10px; background: var(--surface); }
+.s2-preview { min-height: 0; flex: 1; overflow: auto; margin: 0; padding: 10px; }
+.s2-dialog-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: rgb(0 0 0 / 55%); }
+.s2-dialog { width: min(420px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 18px; box-shadow: 0 20px 60px rgb(0 0 0 / 35%); }
+.s2-dialog h2 { margin: 0 0 8px; font-size: 18px; }
+.s2-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.s2-dialog-error { color: var(--danger, #d44); }
+
 @media (max-width: 1180px) {
   .s2-layout {
     grid-template-columns: 200px minmax(0, 1fr);
