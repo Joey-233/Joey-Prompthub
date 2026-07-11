@@ -128,6 +128,44 @@ describe('Seedance2 workspace', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('clipboard denied')
   })
 
+  it('retains preset name and exact segment while a failed save is retried', async () => {
+    const segment = { id: 'shot-1', timeLabel: '0-3s', shotType: 'Close', description: 'desc', dialog: '' }
+    const api = seedApi()
+    vi.mocked(api.listTemplates).mockResolvedValue([{ ...templates[0], data: { ...templates[0].data, segments: [segment] } }])
+    vi.mocked(api.createPreset).mockRejectedValueOnce(new Error('preset offline')).mockResolvedValueOnce({ id: 'preset-1', name: 'Hero shot', segment, tags: [], createdAt: 'now', updatedAt: 'now' })
+    render(<Seedance2 />); const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'One' }))
+    await user.click(screen.getByRole('button', { name: '镜头序列', expanded: false }))
+    await user.click(screen.getByTitle('存为片段预设'))
+    const name = screen.getByRole('textbox', { name: '预设名称' })
+    await user.clear(name); await user.type(name, 'Hero shot')
+    await user.click(screen.getByRole('button', { name: '保存预设' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('preset offline')
+    expect(name).toHaveValue('Hero shot')
+    await user.click(screen.getByRole('button', { name: '保存预设' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '保存镜头预设' })).not.toBeInTheDocument())
+    expect(api.createPreset).toHaveBeenNthCalledWith(1, expect.objectContaining({ name: 'Hero shot', segment: expect.objectContaining({ timeLabel: '0-3s', description: 'desc' }) }))
+    expect(api.createPreset).toHaveBeenNthCalledWith(2, expect.objectContaining({ name: 'Hero shot', segment: expect.objectContaining({ timeLabel: '0-3s', description: 'desc' }) }))
+  })
+
+  it('retries only preset reload when creation already succeeded', async () => {
+    const segment = { id: 'shot-1', timeLabel: '0-3s', shotType: 'Close', description: 'desc', dialog: '' }
+    const api = seedApi()
+    vi.mocked(api.listTemplates).mockResolvedValue([{ ...templates[0], data: { ...templates[0].data, segments: [segment] } }])
+    vi.mocked(api.createPreset).mockResolvedValue({ id: 'preset-1', name: 'Close', segment, tags: [], createdAt: 'now', updatedAt: 'now' })
+    vi.mocked(api.listPresets).mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('reload failed')).mockResolvedValueOnce([])
+    render(<Seedance2 />); const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'One' }))
+    await user.click(screen.getByRole('button', { name: '镜头序列', expanded: false }))
+    await user.click(screen.getByTitle('存为片段预设'))
+    await user.click(screen.getByRole('button', { name: '保存预设' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('reload failed')
+    await user.click(screen.getByRole('button', { name: '保存预设' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '保存镜头预设' })).not.toBeInTheDocument())
+    expect(api.createPreset).toHaveBeenCalledTimes(1)
+    expect(api.listPresets).toHaveBeenCalledTimes(3)
+  })
+
   it('guards a dirty template switch and cancel retains the draft', async () => {
     seedApi(); render(<Seedance2 />); const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'One' }))

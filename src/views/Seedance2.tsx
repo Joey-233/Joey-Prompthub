@@ -8,6 +8,9 @@ import { useAppStore } from '../stores/appStore'
 import type { Seedance2PresetRecord, Seedance2RefGroup, Seedance2RefItem, Seedance2Segment, Seedance2TemplateData, Seedance2TemplateRecord } from '../shared/types'
 import { SortableSegment } from './seedance2/SortableSegment'
 import { DestructiveConfirmationDialog } from './seedance2/DestructiveConfirmationDialog'
+import { PresetSaveDialog } from './seedance2/PresetSaveDialog'
+import { SeedancePreviewPanel } from './seedance2/SeedancePreviewPanel'
+import { SeedanceSection } from './seedance2/SeedanceSection'
 import { emptySegment, emptyTemplate, serializeTemplate } from './seedance2/serialize'
 import { UnsavedChangesDialog } from './seedance2/UnsavedChangesDialog'
 
@@ -34,6 +37,9 @@ export function Seedance2() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [copyStatus, setCopyStatus] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+  const [presetDraft, setPresetDraft] = useState<{ name: string; segment: Seedance2Segment; created: boolean } | null>(null)
+  const [presetSaving, setPresetSaving] = useState(false)
+  const [presetError, setPresetError] = useState<string | null>(null)
   const revision = useRef(0)
   const savingRef = useRef(false)
   const setNavigationGuard = useAppStore((s) => s.setNavigationGuard)
@@ -94,7 +100,31 @@ export function Seedance2() {
   const dragEnd = ({ active, over }: DragEndEvent) => { if (!over || active.id === over.id) return; const from = draft.segments.findIndex((s) => s.id === active.id); const to = draft.segments.findIndex((s) => s.id === over.id); if (from >= 0 && to >= 0) patchDraft({ segments: arrayMove(draft.segments, from, to) }) }
   const updateRefGroup = (index: number, patch: Partial<Seedance2RefGroup>) => patchDraft({ refGroups: draft.refGroups.map((g, i) => i === index ? { ...g, ...patch } : g) })
   const updateRefItem = (g: number, i: number, patch: Partial<Seedance2RefItem>) => updateRefGroup(g, { items: draft.refGroups[g].items.map((item, index) => index === i ? { ...item, ...patch } : item) })
-  const savePreset = async (segment: Seedance2Segment) => { const name = prompt('预设名称', segment.timeLabel || segment.shotType || '镜头预设'); if (!name) return; await api().createPreset({ name, segment: { ...segment, id: crypto.randomUUID() }, tags: [] }); await reloadPresets() }
+  const beginPresetSave = (segment: Seedance2Segment) => {
+    setPresetError(null)
+    setPresetDraft({
+      name: segment.timeLabel || segment.shotType || '镜头预设',
+      segment: { ...segment, id: crypto.randomUUID() },
+      created: false
+    })
+  }
+  const savePreset = async () => {
+    if (!presetDraft || presetSaving) return
+    setPresetSaving(true); setPresetError(null)
+    let created = presetDraft.created
+    try {
+      if (!created) {
+        await api().createPreset({ name: presetDraft.name.trim(), segment: presetDraft.segment, tags: [] })
+        created = true
+        setPresetDraft((value) => value ? { ...value, created: true } : value)
+      }
+      await reloadPresets()
+      setPresetDraft(null)
+    } catch (error) {
+      setPresetError(error instanceof Error ? error.message : '预设保存失败')
+      if (created) setPresetDraft((value) => value ? { ...value, created: true } : value)
+    } finally { setPresetSaving(false) }
+  }
   const preview = useMemo(() => serializeTemplate(draft), [draft])
   const executeDestructive = async () => {
     if (!destructive || deleting) return
@@ -116,10 +146,13 @@ export function Seedance2() {
 
   const openSection = (section: Section) => { setActiveSection(section); requestAnimationFrame(() => { const node = refs.current[section]; node?.scrollIntoView?.({ block: 'start' }); node?.querySelector<HTMLElement>('textarea, input, button')?.focus() }) }
   const toggleSection = (section: Section) => setActiveSection((active) => active === section ? null : section)
-  const accordion = (section: Section, children: ReactNode) => <section ref={(node) => { refs.current[section] = node }} className="s2-accordion">
-    <h2><button type="button" aria-expanded={activeSection === section} aria-controls={`seedance-section-${section}`} onClick={() => toggleSection(section)}>{sectionNames[section]}</button></h2>
-    <div id={`seedance-section-${section}`} hidden={activeSection !== section}>{children}</div>
-  </section>
+  const accordion = (section: Section, children: ReactNode) => <SeedanceSection
+    id={section}
+    title={sectionNames[section]}
+    expanded={activeSection === section}
+    sectionRef={(node) => { refs.current[section] = node }}
+    onToggle={() => toggleSection(section)}
+  >{children}</SeedanceSection>
 
   const tabs: Array<{ id: ResourceTab; label: string }> = [{ id: 'templates', label: '模板' }, { id: 'presets', label: '预设' }, { id: 'references', label: '参考' }]
   const tabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tab: ResourceTab) => {
@@ -143,11 +176,11 @@ export function Seedance2() {
     <div className="s2-editor-scroll">
       {accordion('intro', <textarea aria-label="开篇总述内容" className="s2-textarea" rows={5} value={draft.intro} onChange={(e) => patchDraft({ intro: e.target.value })} />)}
       {accordion('references', <><button className="s2-btn" onClick={() => patchDraft({ refGroups: [...draft.refGroups, { title: '新参考分组', description: '', items: [] }] })}>+ 参考分组</button>{draft.refGroups.map((group, g) => <div id={`seedance-ref-group-${g}`} className="s2-ref-group" key={g}><input aria-label={`参考分组 ${g + 1} 标题`} className="s2-input" value={group.title} onChange={(e) => updateRefGroup(g, { title: e.target.value })} /><textarea className="s2-textarea" value={group.description} onChange={(e) => updateRefGroup(g, { description: e.target.value })} /><button className="s2-btn" onClick={() => updateRefGroup(g, { items: [...group.items, { emoji: '🖼️', label: `图片${group.items.length + 1}`, note: '' }] })}>+ 参考图</button><button className="s2-btn" onClick={() => patchDraft({ refGroups: draft.refGroups.filter((_, i) => i !== g) })}>删除分组</button>{group.items.map((item, i) => <div className="s2-ref-row" key={i}><input className="s2-input" value={item.emoji} onChange={(e) => updateRefItem(g, i, { emoji: e.target.value })} /><input className="s2-input" value={item.label} onChange={(e) => updateRefItem(g, i, { label: e.target.value })} /><input className="s2-input" value={item.note} onChange={(e) => updateRefItem(g, i, { note: e.target.value })} /><button onClick={() => updateRefGroup(g, { items: group.items.filter((_, x) => x !== i) })}>×</button></div>)}</div>)}</>)}
-      {accordion('shots', <><button className="s2-btn s2-btn-primary" onClick={() => patchDraft({ segments: [...draft.segments, emptySegment()] })}>+ 新增镜头</button><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={dragEnd}><SortableContext items={draft.segments.map((s) => s.id)} strategy={verticalListSortingStrategy}>{draft.segments.map((segment, index) => <SortableSegment key={segment.id} segment={segment} index={index} onChange={(patch) => updateSegment(segment.id, patch)} onDelete={() => patchDraft({ segments: draft.segments.filter((s) => s.id !== segment.id) })} onDuplicate={() => { const at = draft.segments.findIndex((s) => s.id === segment.id); const next = [...draft.segments]; next.splice(at + 1, 0, { ...segment, id: crypto.randomUUID() }); patchDraft({ segments: next }) }} onSaveAsPreset={() => void savePreset(segment)} />)}</SortableContext></DndContext><textarea aria-label="镜头序列底部说明" className="s2-textarea" value={draft.segmentsFooter} onChange={(e) => patchDraft({ segmentsFooter: e.target.value })} /></>)}
+      {accordion('shots', <><button className="s2-btn s2-btn-primary" onClick={() => patchDraft({ segments: [...draft.segments, emptySegment()] })}>+ 新增镜头</button><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={dragEnd}><SortableContext items={draft.segments.map((s) => s.id)} strategy={verticalListSortingStrategy}>{draft.segments.map((segment, index) => <SortableSegment key={segment.id} segment={segment} index={index} onChange={(patch) => updateSegment(segment.id, patch)} onDelete={() => patchDraft({ segments: draft.segments.filter((s) => s.id !== segment.id) })} onDuplicate={() => { const at = draft.segments.findIndex((s) => s.id === segment.id); const next = [...draft.segments]; next.splice(at + 1, 0, { ...segment, id: crypto.randomUUID() }); patchDraft({ segments: next }) }} onSaveAsPreset={() => beginPresetSave(segment)} />)}</SortableContext></DndContext><textarea aria-label="镜头序列底部说明" className="s2-textarea" value={draft.segmentsFooter} onChange={(e) => patchDraft({ segmentsFooter: e.target.value })} /></>)}
       {accordion('style', <textarea aria-label="风格内容" className="s2-textarea" rows={6} value={draft.style} onChange={(e) => patchDraft({ style: e.target.value })} />)}
     </div>
   </main>
-  const detail = <aside className="s2-preview-wrap" aria-label="实时预览"><div className="s2-preview-header"><strong>实时预览</strong><button className="s2-btn s2-btn-primary" onClick={() => void copyPreview()}>复制</button></div>{copyStatus && <p role={copyStatus.kind === 'error' ? 'alert' : 'status'}>{copyStatus.text}</p>}<pre className="s2-preview">{preview}</pre></aside>
+  const detail = <SeedancePreviewPanel preview={preview} copyStatus={copyStatus} onCopy={() => void copyPreview()} />
 
-  return <><WorkspaceLayout resource={resource} resourceLabel="Seedance2 资源" main={main} detail={detail} detailLabel="实时预览" />{pending && <UnsavedChangesDialog saving={saving} error={saveError} onSave={() => void saveAndContinue()} onDiscard={() => perform(pending)} onCancel={() => { setPending(null); setSaveError(null) }} />}{destructive && <DestructiveConfirmationDialog kind={destructive.type === 'template' ? '模板' : '预设'} name={destructive.name} pending={deleting} error={deleteError} onCancel={() => { setDestructive(null); setDeleteError(null) }} onConfirm={() => void executeDestructive()} />}</>
+  return <><WorkspaceLayout resource={resource} resourceLabel="Seedance2 资源" main={main} detail={detail} detailLabel="实时预览" />{pending && <UnsavedChangesDialog saving={saving} error={saveError} onSave={() => void saveAndContinue()} onDiscard={() => perform(pending)} onCancel={() => { setPending(null); setSaveError(null) }} />}{destructive && <DestructiveConfirmationDialog kind={destructive.type === 'template' ? '模板' : '预设'} name={destructive.name} pending={deleting} error={deleteError} onCancel={() => { setDestructive(null); setDeleteError(null) }} onConfirm={() => void executeDestructive()} />}{presetDraft && <PresetSaveDialog name={presetDraft.name} pending={presetSaving} error={presetError} onNameChange={(name) => setPresetDraft((value) => value ? { ...value, name } : value)} onCancel={() => { setPresetDraft(null); setPresetError(null) }} onSave={() => void savePreset()} />}</>
 }
