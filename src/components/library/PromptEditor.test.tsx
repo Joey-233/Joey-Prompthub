@@ -100,7 +100,7 @@ describe('PromptEditor', () => {
       finishImageRead('data:image/jpeg;base64,RESIZED')
     })
     expect(screen.getByAltText('预览图 1')).toBeInTheDocument()
-    await vi.advanceTimersByTimeAsync(850)
+    await act(async () => { await vi.advanceTimersByTimeAsync(850) })
 
     expect(updatePrompt).toHaveBeenCalledWith(
       'image-1',
@@ -108,6 +108,35 @@ describe('PromptEditor', () => {
         previewImages: ['data:image/jpeg;base64,RESIZED']
       })
     )
+    await act(async () => {})
+    expect(screen.getByRole('status')).toHaveTextContent('已保存')
+  })
+
+  it('shows an error and retries the latest failed patch', async () => {
+    vi.useFakeTimers()
+    const updatePrompt = vi.fn()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(prompt)
+    window.promptHub.prompts.update = updatePrompt
+    render(<PromptEditor prompt={prompt} />)
+    fireEvent.change(screen.getByLabelText('提示词内容'), { target: { value: 'latest patch' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(850) })
+    expect(screen.getByRole('status')).toHaveTextContent('保存失败')
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '重试' })) })
+    expect(updatePrompt).toHaveBeenLastCalledWith('image-1', expect.objectContaining({ content: 'latest patch' }))
+    expect(screen.getByRole('status')).toHaveTextContent('已保存')
+  })
+
+  it('does not let a stale prompt request update the new prompt status', async () => {
+    vi.useFakeTimers()
+    let rejectOld!: (reason: Error) => void
+    window.promptHub.prompts.update = vi.fn().mockImplementationOnce(() => new Promise((_, reject) => { rejectOld = reject }))
+    const { rerender } = render(<PromptEditor prompt={prompt} />)
+    fireEvent.change(screen.getByLabelText('提示词内容'), { target: { value: 'old edit' } })
+    await vi.advanceTimersByTimeAsync(850)
+    rerender(<PromptEditor prompt={{ ...prompt, id: 'image-2', content: 'new prompt' }} />)
+    await act(async () => rejectOld(new Error('late failure')))
+    expect(screen.getByRole('status')).not.toHaveTextContent('保存失败')
   })
 
   it('removes an existing preview image with an empty-string patch', async () => {

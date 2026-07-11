@@ -45,7 +45,11 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
   const [showOptimizeDialog, setShowOptimizeDialog] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [previewError, setPreviewError] = useState('')
+  const [saveStatus, setSaveStatus] = useState<'saving' | 'saved' | 'error'>('saved')
   const previewInputRef = useRef<HTMLInputElement | null>(null)
+  const activePromptIdRef = useRef(prompt.id)
+  activePromptIdRef.current = prompt.id
+  const latestPatchRef = useRef<ReturnType<typeof buildDraftPatch> | null>(null)
 
   // Tags are stored as string[] in the data model, but the editor input is a
   // single comma-separated string. We keep the raw text in local state so the
@@ -64,7 +68,7 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
     return () => {
       const d = pendingDraftRef.current
       if (hasDraftChanges(d, prompt)) {
-        void updatePromptRef.current(d.id, buildDraftPatch(d))
+        void updatePromptRef.current(d.id, buildDraftPatch(d)).catch(() => undefined)
       }
     }
   }, [prompt.id])
@@ -74,7 +78,18 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
     setTagsInput(prompt.tags.join(', '))
     setConfirmDelete(false)
     setPreviewError('')
+    setSaveStatus('saved')
+    latestPatchRef.current = null
   }, [prompt])
+
+  function savePatch(id: string, patch: ReturnType<typeof buildDraftPatch>) {
+    latestPatchRef.current = patch
+    if (activePromptIdRef.current === id) setSaveStatus('saving')
+    return updatePromptRef.current(id, patch).then(
+      () => { if (activePromptIdRef.current === id) setSaveStatus('saved') },
+      () => { if (activePromptIdRef.current === id) setSaveStatus('error') }
+    )
+  }
 
   // Ctrl+V 粘贴图片：从剪贴板抓 image/* 项加入预览
   useEffect(() => {
@@ -155,7 +170,7 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
   useDebouncedEffect(
     () => {
       if (hasDraftChanges(draft, prompt)) {
-        void updatePrompt(draft.id, buildDraftPatch(draft))
+        void savePatch(draft.id, buildDraftPatch(draft))
       }
     },
     800,
@@ -164,6 +179,13 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
 
   return (
     <aside className="editor-panel">
+      <header className="editor-heading">
+        <h2>提示词详情</h2>
+        <span className="editor-save-status" role="status" data-status={saveStatus}>
+          {saveStatus === 'saving' ? '保存中…' : saveStatus === 'error' ? '保存失败' : '已保存'}
+        </span>
+        {saveStatus === 'error' && latestPatchRef.current ? <button className="editor-retry" type="button" onClick={() => void savePatch(prompt.id, latestPatchRef.current!)}>重试</button> : null}
+      </header>
       <div className="editor-fields">
         <label className="field">
           <span className="field-label">提示词内容</span>

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { PromptRecord } from '../shared/types'
+import { usePromptStore } from '../stores/promptStore'
 import { Library } from './Library'
 
 const prompts: PromptRecord[] = [
@@ -38,6 +39,14 @@ const prompts: PromptRecord[] = [
 
 describe('Library', () => {
   beforeEach(() => {
+    usePromptStore.setState({ filterTag: null, sortMode: 'default', search: '', selectedPromptId: null })
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: query.includes('1320'), media: query,
+        addEventListener: vi.fn(), removeEventListener: vi.fn()
+      }))
+    })
     Object.defineProperty(window, 'promptHub', {
       configurable: true,
       value: {
@@ -131,6 +140,29 @@ describe('Library', () => {
       expect(screen.queryByRole('button', { name: '赛博朋克街景' })).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: '代码审查助手' })).toBeInTheDocument()
     })
+  })
+
+  it('uses named resource, main, and detail workspace regions', async () => {
+    render(<Library />)
+    expect(await screen.findByRole('region', { name: '提示词筛选' })).toBeInTheDocument()
+    expect(screen.getByRole('main', { name: '提示词工作区' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '提示词详情' })).toBeInTheDocument()
+    expect(screen.getByLabelText('快速录入')).toBeInTheDocument()
+  })
+
+  it('searches, sorts, and repairs selection when the result changes', async () => {
+    const user = userEvent.setup()
+    render(<Library />)
+    const first = await screen.findByRole('button', { name: '赛博朋克街景' })
+    await user.click(first)
+    await user.type(screen.getByLabelText('搜索提示词'), '代码')
+    await waitFor(() => expect(screen.queryByRole('button', { name: '赛博朋克街景' })).not.toBeInTheDocument())
+    expect(screen.getByLabelText('提示词内容')).toHaveValue('你是一位资深代码审查专家')
+    await user.clear(screen.getByLabelText('搜索提示词'))
+    await waitFor(() => expect(screen.getByRole('button', { name: '赛博朋克街景' })).toBeInTheDocument())
+    await user.selectOptions(screen.getByRole('combobox', { name: '排序方式' }), 'recent-used')
+    const cards = screen.getAllByRole('button').filter((button) => ['赛博朋克街景', '代码审查助手'].includes(button.getAttribute('aria-label') ?? ''))
+    expect(cards[0]).toHaveAttribute('aria-label', '赛博朋克街景')
   })
 
   it('shows only favorite prompts when favorite mode is selected', async () => {

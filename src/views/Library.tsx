@@ -1,9 +1,11 @@
 import { useEffect, useMemo } from 'react'
 
-import { LibraryFilters } from '../components/library/LibraryFilters'
+import { LibrarySidebar } from '../components/library/LibrarySidebar'
+import { LibraryToolbar } from '../components/library/LibraryToolbar'
 import { PromptCard } from '../components/library/PromptCard'
 import { PromptEditor } from '../components/library/PromptEditor'
 import { QuickCapture } from '../components/library/QuickCapture'
+import { WorkspaceLayout } from '../components/layout/WorkspaceLayout'
 import { sortPrompts } from '../shared/promptActivity'
 import { usePromptStore } from '../stores/promptStore'
 
@@ -63,15 +65,12 @@ export function Library() {
   const selectedPrompt =
     visiblePrompts.find((prompt) => prompt.id === selectedPromptId) ?? null
 
-  return (
-    <section className="page-body">
-      <h2 className="library-title">提示词库</h2>
+  const main = <main className="library-main" aria-label="提示词工作区">
       <QuickCapture />
-      <LibraryFilters />
+      <LibraryToolbar />
       {loading ? (
         <div className="empty-state">正在加载提示词...</div>
       ) : (
-        <div className="library-layout">
           <div className="prompt-grid">
             {visiblePrompts.length === 0 ? (
               <div className="empty-state prompt-grid-empty">
@@ -89,9 +88,8 @@ export function Library() {
               ))
             )}
           </div>
-          {selectedPrompt ? <PromptEditor prompt={selectedPrompt} /> : null}
-        </div>
       )}
-    </section>
-  )
+    </main>
+  const detail = selectedPrompt ? <PromptEditor prompt={selectedPrompt} /> : <div className="empty-state library-detail-empty">选择一条提示词即可查看和编辑详情</div>
+  return <WorkspaceLayout resource={<LibrarySidebar />} resourceLabel="提示词筛选" main={main} detail={detail} detailLabel="提示词详情" />
 }

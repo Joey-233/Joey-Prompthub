@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent as ReactKeyboardEvent, useMemo, useState } from 'react'
+import { FormEvent, KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 
 import { IMAGE_TAG, LLM_TAG, TYPE_TAGS } from '../../shared/types'
 import { usePromptStore } from '../../stores/promptStore'
@@ -32,6 +32,16 @@ export function QuickCapture() {
   const [tags, setTags] = useState<string[]>([])
   const [tagDraft, setTagDraft] = useState('')
   const [showRecognizeDialog, setShowRecognizeDialog] = useState(false)
+  const [focused, setFocused] = useState(false)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const expanded = focused || content.length > 0 || showRecognizeDialog
+
+  useEffect(() => {
+    const input = inputRef.current
+    if (!input) return
+    input.style.height = 'auto'
+    input.style.height = `${Math.min(input.scrollHeight, 140)}px`
+  }, [content, expanded])
 
   const userTags = useMemo(
     () => tags.filter((tag) => !TYPE_TAGS.includes(tag as (typeof TYPE_TAGS)[number])),
@@ -99,12 +109,15 @@ export function QuickCapture() {
   }
 
   return (
-    <form className="capture-panel" onSubmit={(event) => void handleSubmit(event)}>
+    <form className="capture-panel" data-expanded={expanded} onSubmit={(event) => void handleSubmit(event)}>
       <textarea
+        ref={inputRef}
         aria-label="快速录入"
         className="capture-input"
         placeholder="写下或粘贴一段提示词，Ctrl+Enter 保存..."
         value={content}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         onChange={(event) => setContent(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {

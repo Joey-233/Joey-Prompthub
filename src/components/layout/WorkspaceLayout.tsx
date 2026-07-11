@@ -14,6 +14,7 @@ export interface WorkspaceLayoutProps {
 }
 
 function getBreakpoint(): Breakpoint {
+  if (typeof window.matchMedia !== 'function') return 'desktop'
   if (window.matchMedia('(min-width: 1320px)').matches) return 'desktop'
   if (window.matchMedia('(min-width: 1024px)').matches) return 'tablet'
   return 'mobile'
@@ -22,6 +23,7 @@ function getBreakpoint(): Breakpoint {
 function useBreakpoint() {
   const [breakpoint, setBreakpoint] = useState<Breakpoint>(getBreakpoint)
   useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
     const desktop = window.matchMedia('(min-width: 1320px)')
     const tablet = window.matchMedia('(min-width: 1024px)')
     const update = () => setBreakpoint(desktop.matches ? 'desktop' : tablet.matches ? 'tablet' : 'mobile')

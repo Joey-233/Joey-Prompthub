@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -32,6 +32,39 @@ describe('QuickCapture tag entry', () => {
         makePrompt({ id: 'c', tags: ['LLM', '人物'] })
       ]
     })
+  })
+
+  it('expands on focus or content and collapses after empty blur', async () => {
+    const user = userEvent.setup()
+    render(<QuickCapture />)
+
+    const capture = screen.getByLabelText('快速录入')
+    const panel = capture.closest('form')
+    expect(panel).toHaveAttribute('data-expanded', 'false')
+
+    await user.click(capture)
+    expect(panel).toHaveAttribute('data-expanded', 'true')
+
+    await user.type(capture, '两行\n内容')
+    fireEvent.blur(capture)
+    expect(panel).toHaveAttribute('data-expanded', 'true')
+
+    await user.clear(capture)
+    fireEvent.blur(capture)
+    expect(panel).toHaveAttribute('data-expanded', 'false')
+  })
+
+  it('saves with Ctrl+Enter and keeps recognition available when expanded', async () => {
+    const user = userEvent.setup()
+    const create = vi.fn().mockResolvedValue(makePrompt({ id: 'new' }))
+    window.promptHub.prompts.create = create
+    render(<QuickCapture />)
+
+    const capture = screen.getByLabelText('快速录入')
+    await user.click(capture)
+    expect(screen.getByRole('button', { name: '识图' })).toBeInTheDocument()
+    await user.type(capture, '快捷保存{Control>}{Enter}{/Control}')
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ content: '快捷保存' }))
   })
 
   it('passes typed tags to createPrompt on save', async () => {

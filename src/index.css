@@ -170,24 +170,29 @@ button {
 /* ── 快速录入卡片 ── */
 .capture-panel {
   display: grid;
-  gap: 12px;
-  padding: 16px 18px 14px;
+  gap: 8px;
+  min-height: 48px;
+  padding: 8px 10px;
   border: 1px solid var(--pv-border);
-  border-radius: 22px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.82);
 }
 
 .capture-input {
-  min-height: 110px;
-  padding: 6px 4px;
+  min-height: 30px;
+  max-height: 140px;
+  padding: 4px;
   border: none;
   outline: none;
-  resize: vertical;
+  resize: none;
   color: var(--pv-text);
   background: transparent;
   font-size: 0.95rem;
   line-height: 1.6;
 }
+
+.capture-panel[data-expanded='false'] .capture-input { height: 30px !important; overflow: hidden; }
+.capture-panel[data-expanded='false'] .capture-toolbar { display: none; }
 
 .capture-toolbar {
   display: flex;
@@ -358,9 +363,10 @@ button {
 }
 
 .library-toolbar {
-  display: grid;
-  gap: 10px;
-  padding: 0 2px;
+  display: flex;
+  gap: 8px;
+  padding: 0;
+  align-items: center;
 }
 
 .library-toolbar-row {
@@ -429,11 +435,11 @@ button {
 .prompt-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 1px;
-  border: 1px solid var(--pv-border);
-  border-radius: 22px;
-  overflow: hidden;
-  background: rgba(157, 149, 138, 0.18);
+  gap: 8px;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+  background: transparent;
 }
 
 .library-layout {
@@ -443,12 +449,22 @@ button {
   gap: 18px;
 }
 
+.library-main { display: grid; align-content: start; gap: 8px; }
+.library-sidebar { display: grid; align-content: start; gap: 12px; }
+.library-sidebar-section { display: grid; gap: 4px; }
+.library-nav-item { display: flex; justify-content: space-between; width: 100%; padding: 7px 8px; border: 0; border-radius: 8px; color: var(--pv-text-muted); background: transparent; text-align: left; }
+.library-nav-item:hover, .library-nav-item[data-active='true'] { color: var(--pv-text); background: rgba(220, 231, 247, 0.72); }
+.library-nav-count { font-size: .75rem; color: var(--pv-text-muted); }
+.library-detail-empty { padding: 24px 8px; }
+
 .prompt-card {
   position: relative;
   display: grid;
   gap: 10px;
-  padding: 14px 16px;
+  padding: 10px;
   padding-right: 44px;
+  border: 1px solid var(--pv-border);
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.74);
   cursor: pointer;
   transition: background-color 150ms ease;
@@ -581,6 +597,12 @@ button {
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.84);
 }
+
+.editor-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.editor-heading h2 { margin: 0; font-size: 1rem; }
+.editor-save-status { margin-left: auto; color: var(--pv-text-muted); font-size: .78rem; }
+.editor-save-status[data-status='error'] { color: #b84c42; }
+.editor-retry { padding: 3px 8px; border: 1px solid var(--pv-border); border-radius: 6px; background: transparent; }
 
 .editor-fields {
   display: grid;
