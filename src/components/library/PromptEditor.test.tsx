@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 // jsdom 没有 canvas，mock 图片压缩工具
 vi.mock('../../lib/imageFile', () => ({
@@ -9,6 +9,10 @@ vi.mock('../../lib/imageFile', () => ({
 
 import type { PromptRecord } from '../../shared/types'
 import { PromptEditor } from './PromptEditor'
+
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 const prompt: PromptRecord = {
   id: 'image-1',
@@ -81,7 +85,7 @@ describe('PromptEditor', () => {
 
     // 读图是异步 mock，先等预览渲染出来
     await waitFor(() => {
-      expect(screen.getByAltText('提示词预览图')).toBeInTheDocument()
+      expect(screen.getByAltText('预览图 1')).toBeInTheDocument()
     })
 
     // 真实跑完 800ms debounce 自动保存
@@ -89,7 +93,9 @@ describe('PromptEditor', () => {
       () => {
         expect(updatePrompt).toHaveBeenCalledWith(
           'image-1',
-          expect.objectContaining({ previewImage: 'data:image/jpeg;base64,RESIZED' })
+          expect.objectContaining({
+            previewImages: ['data:image/jpeg;base64,RESIZED']
+          })
         )
       },
       { timeout: 2000 }
@@ -107,13 +113,13 @@ describe('PromptEditor', () => {
 
     render(<PromptEditor prompt={promptWithPreview} />)
 
-    expect(screen.getByAltText('提示词预览图')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '移除预览图' }))
+    expect(screen.getByAltText('预览图 1')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '移除该预览图' }))
     await vi.advanceTimersByTimeAsync(900)
 
     expect(updatePrompt).toHaveBeenCalledWith(
       'image-1',
-      expect.objectContaining({ previewImage: '' })
+      expect.objectContaining({ previewImages: [] })
     )
 
     vi.useRealTimers()

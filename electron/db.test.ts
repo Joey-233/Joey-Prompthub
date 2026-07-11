@@ -31,9 +31,28 @@ vi.mock('better-sqlite3', () => {
     created_at: string
   }
 
+  type Seedance2TemplateRow = {
+    id: string
+    title: string
+    data: string
+    created_at: string
+    updated_at: string
+  }
+
+  type Seedance2PresetRow = {
+    id: string
+    name: string
+    tags: string
+    segment: string
+    created_at: string
+    updated_at: string
+  }
+
   class FakeDatabase {
     private prompts: PromptRow[] = []
     private generations: GenerationRow[] = []
+    private seedance2Templates: Seedance2TemplateRow[] = []
+    private seedance2Presets: Seedance2PresetRow[] = []
 
     pragma() {}
 
@@ -247,6 +266,84 @@ vi.mock('better-sqlite3', () => {
         return { run: () => undefined }
       }
 
+      if (normalized.startsWith('insert into seedance2_templates')) {
+        return {
+          run: (params: { id: string; title: string; data: string }) => {
+            this.seedance2Templates.push({
+              ...params,
+              created_at: '2026-04-19 00:00:03',
+              updated_at: '2026-04-19 00:00:03'
+            })
+          }
+        }
+      }
+
+      if (normalized.startsWith('update seedance2_templates')) {
+        return {
+          run: (params: { id: string; title: string; data: string }) => {
+            const target = this.seedance2Templates.find((row) => row.id === params.id)
+            if (target) Object.assign(target, params, { updated_at: '2026-04-19 00:00:04' })
+          }
+        }
+      }
+
+      if (normalized.startsWith('delete from seedance2_templates where id = ?')) {
+        return {
+          run: (id: string) => {
+            this.seedance2Templates = this.seedance2Templates.filter((row) => row.id !== id)
+          }
+        }
+      }
+
+      if (normalized.includes('from seedance2_templates where id = ?')) {
+        return {
+          get: (id: string) => this.seedance2Templates.find((row) => row.id === id)
+        }
+      }
+
+      if (normalized.includes('from seedance2_templates order by')) {
+        return { all: () => [...this.seedance2Templates] }
+      }
+
+      if (normalized.startsWith('insert into seedance2_segment_presets')) {
+        return {
+          run: (params: { id: string; name: string; tags: string; segment: string }) => {
+            this.seedance2Presets.push({
+              ...params,
+              created_at: '2026-04-19 00:00:03',
+              updated_at: '2026-04-19 00:00:03'
+            })
+          }
+        }
+      }
+
+      if (normalized.startsWith('update seedance2_segment_presets')) {
+        return {
+          run: (params: { id: string; name: string; tags: string; segment: string }) => {
+            const target = this.seedance2Presets.find((row) => row.id === params.id)
+            if (target) Object.assign(target, params, { updated_at: '2026-04-19 00:00:04' })
+          }
+        }
+      }
+
+      if (normalized.startsWith('delete from seedance2_segment_presets where id = ?')) {
+        return {
+          run: (id: string) => {
+            this.seedance2Presets = this.seedance2Presets.filter((row) => row.id !== id)
+          }
+        }
+      }
+
+      if (normalized.includes('from seedance2_segment_presets where id = ?')) {
+        return {
+          get: (id: string) => this.seedance2Presets.find((row) => row.id === id)
+        }
+      }
+
+      if (normalized.includes('from seedance2_segment_presets order by')) {
+        return { all: () => [...this.seedance2Presets] }
+      }
+
       throw new Error(`Unhandled SQL in fake better-sqlite3: ${sql}`)
     }
   }
@@ -389,5 +486,64 @@ describe('prompt database', () => {
     }
     const created = db.prompts.create({ content: 'x', tags: ['绘图'], params })
     expect(created.params).toEqual(params)
+  })
+
+  it('round-trips Seedance2 templates through create, update, list, and delete', () => {
+    const db = createPromptDatabase(':memory:')
+    const data = {
+      intro: 'opening',
+      refGroups: [],
+      segments: [],
+      segmentsFooter: 'ending',
+      style: 'cinematic'
+    }
+
+    const created = db.seedance2.createTemplate({ title: 'Storyboard', data })
+    expect(created).toMatchObject({ title: 'Storyboard', data })
+    expect(db.seedance2.listTemplates()).toEqual([created])
+
+    const updatedData = { ...data, style: 'documentary' }
+    const updated = db.seedance2.updateTemplate(created.id, {
+      title: 'Updated storyboard',
+      data: updatedData
+    })
+    expect(updated).toMatchObject({ title: 'Updated storyboard', data: updatedData })
+
+    db.seedance2.deleteTemplate(created.id)
+    expect(db.seedance2.listTemplates()).toEqual([])
+  })
+
+  it('round-trips Seedance2 segment presets through create, update, list, and delete', () => {
+    const db = createPromptDatabase(':memory:')
+    const segment = {
+      id: 'segment-1',
+      timeLabel: '0-3s',
+      shotType: 'wide',
+      description: 'A city wakes up',
+      dialog: ''
+    }
+
+    const created = db.seedance2.createPreset({
+      name: 'Opening',
+      tags: ['city', 'wide'],
+      segment
+    })
+    expect(created).toMatchObject({ name: 'Opening', tags: ['city', 'wide'], segment })
+    expect(db.seedance2.listPresets()).toEqual([created])
+
+    const updatedSegment = { ...segment, shotType: 'close-up' }
+    const updated = db.seedance2.updatePreset(created.id, {
+      name: 'Opening close-up',
+      tags: ['city'],
+      segment: updatedSegment
+    })
+    expect(updated).toMatchObject({
+      name: 'Opening close-up',
+      tags: ['city'],
+      segment: updatedSegment
+    })
+
+    db.seedance2.deletePreset(created.id)
+    expect(db.seedance2.listPresets()).toEqual([])
   })
 })
