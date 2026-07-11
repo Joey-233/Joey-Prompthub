@@ -28,4 +28,34 @@ it('does not publish stale save completion into a newly selected prompt', async 
   gate.resolve({ ...prompts[0], content: 'edited a' })
   await pending
   expect(useTestBenchStore.getState()).toMatchObject({ selectedPromptId: 'b', draftContent: 'edited b', saveStatus: 'idle' })
+  expect(useTestBenchStore.getState().prompts.find((prompt) => prompt.id === 'a')?.content).toBe('edited a')
+})
+
+it.each([
+  ['draft', () => useTestBenchStore.getState().setDraftContent('changed')],
+  ['provider', () => useTestBenchStore.getState().setProviderId('openai-image')],
+  ['params', () => useTestBenchStore.getState().setParams({ count: 2 })]
+])('invalidates generation immediately when %s changes', async (_name, change) => {
+  const gate = deferred<null>()
+  window.promptHub.generations.create = vi.fn().mockReturnValue(gate.promise)
+  useTestBenchStore.setState({ prompts, selectedPromptId: 'a', draftContent: 'prompt a', providerId: 'mock-image', params: { width: 512, height: 512, count: 1 }, results: [], loading: false, generateError: 'old' })
+  const pending = useTestBenchStore.getState().generate()
+  await vi.waitFor(() => expect(window.promptHub.generations.create).toHaveBeenCalled())
+  change()
+  expect(useTestBenchStore.getState()).toMatchObject({ loading: false, generateError: null, results: [] })
+  gate.resolve(null)
+  await pending
+  expect(useTestBenchStore.getState()).toMatchObject({ loading: false, generateError: null, results: [] })
+})
+
+it('applies only the latest overlapping save for one prompt', async () => {
+  const first = deferred<PromptRecord>(); const second = deferred<PromptRecord>()
+  window.promptHub.prompts.update = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+  useTestBenchStore.setState({ prompts, selectedPromptId: 'a', draftContent: 'first', saveStatus: 'idle' })
+  const pendingFirst = useTestBenchStore.getState().saveDraft()
+  useTestBenchStore.getState().setDraftContent('second')
+  const pendingSecond = useTestBenchStore.getState().saveDraft()
+  second.resolve({ ...prompts[0], content: 'second' }); await pendingSecond
+  first.resolve({ ...prompts[0], content: 'first' }); await pendingFirst
+  expect(useTestBenchStore.getState().prompts.find((prompt) => prompt.id === 'a')?.content).toBe('second')
 })

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { expect, it, vi } from 'vitest'
-import { GenerationSettingsPanel } from './GenerationSettingsPanel'
+import { clampNumeric, GenerationSettingsPanel } from './GenerationSettingsPanel'
 
 it('clamps count to provider batch limits', async () => {
   const onParamsChange = vi.fn()
@@ -20,4 +20,10 @@ it('clamps steps to provider capability limits', () => {
   expect(onParamsChange).toHaveBeenLastCalledWith({ steps: 100 })
   fireEvent.change(steps, { target: { value: '0' } })
   expect(onParamsChange).toHaveBeenLastCalledWith({ steps: 1 })
+})
+
+it('clamps generic dimensions and bounded numeric fields', () => {
+  expect(clampNumeric('-20', 1)).toBe(1)
+  expect(clampNumeric('0', 1)).toBe(1)
+  expect(clampNumeric('999', 1, 100)).toBe(100)
 })

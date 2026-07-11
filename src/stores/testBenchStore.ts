@@ -44,6 +44,7 @@ function deriveInitialProvider(settings: Record<string, unknown>): string {
 }
 
 let saveRequest = 0
+const latestSaveByPrompt = new Map<string, number>()
 let generateRequest = 0
 
 export const useTestBenchStore = create<TestBenchState>((set, get) => ({
@@ -107,7 +108,6 @@ export const useTestBenchStore = create<TestBenchState>((set, get) => ({
       return
     }
 
-    saveRequest++
     generateRequest++
     set({
       selectedPromptId: id,
@@ -119,20 +119,22 @@ export const useTestBenchStore = create<TestBenchState>((set, get) => ({
     })
   },
   setDraftContent(value) {
-    saveRequest++
     generateRequest++
-    set({ draftContent: value, saveStatus: 'idle' })
+    set({ draftContent: value, saveStatus: 'idle', loading: false, generateError: null })
   },
   setProviderId(id) {
+    generateRequest++
     const provider = getImageProviderOrFallback(id)
     set({
       providerId: provider.id,
       params: { ...provider.defaultParams },
-      generateError: null
+      generateError: null,
+      loading: false
     })
   },
   setParams(patch) {
-    set((current) => ({ params: { ...current.params, ...patch } }))
+    generateRequest++
+    set((current) => ({ params: { ...current.params, ...patch }, loading: false, generateError: null }))
   },
   setHistoryScope(scope) {
     set({ historyScope: scope })
@@ -164,6 +166,7 @@ export const useTestBenchStore = create<TestBenchState>((set, get) => ({
     const request = ++saveRequest
     const promptId = state.selectedPromptId
     const draftContent = state.draftContent
+    latestSaveByPrompt.set(promptId, request)
     set({ saveStatus: 'saving' })
 
     try {
@@ -175,15 +178,15 @@ export const useTestBenchStore = create<TestBenchState>((set, get) => ({
         ...(currentPrompt ? buildUsagePatch(currentPrompt, timestamp) : {})
       })
 
-      if (request !== saveRequest || get().selectedPromptId !== promptId || get().draftContent !== draftContent) return
+      if (latestSaveByPrompt.get(promptId) !== request) return
       set((current) => ({
         prompts: current.prompts.map((prompt) =>
           prompt.id === updated.id ? updated : prompt
         ),
-        saveStatus: 'saved'
+        saveStatus: current.selectedPromptId === promptId && current.draftContent === draftContent ? 'saved' : current.saveStatus
       }))
     } catch {
-      if (request === saveRequest && get().selectedPromptId === promptId && get().draftContent === draftContent) set({ saveStatus: 'error' })
+      if (latestSaveByPrompt.get(promptId) === request && get().selectedPromptId === promptId && get().draftContent === draftContent) set({ saveStatus: 'error' })
     }
   },
   async generate() {
