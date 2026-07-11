@@ -37,12 +37,19 @@ const prompts: PromptRecord[] = [
 ]
 
 describe('App shell', () => {
-  it('renders the three main navigation tabs', () => {
+  it('renders four global navigation buttons and marks the current view', async () => {
+    const user = userEvent.setup()
     render(<App />)
 
-    expect(screen.getByRole('button', { name: '提示词库' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '提示词库' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('button', { name: '测试台' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Seedance2' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '设置' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '提示词库', level: 1 })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '设置' }))
+    expect(screen.getByRole('button', { name: '设置' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('heading', { name: '设置', level: 1 })).toBeInTheDocument()
   })
 
   it('opens the selected image prompt in the test bench from the library editor', async () => {
