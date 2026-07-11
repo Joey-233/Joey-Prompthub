@@ -31,6 +31,16 @@ const api: PromptHubApi = {
     openaiGenerate: (input) => ipcRenderer.invoke('image:openaiGenerate', input),
     sdWebuiGenerate: (input) => ipcRenderer.invoke('image:sdWebuiGenerate', input)
   },
+  seedance2: {
+    listTemplates: () => ipcRenderer.invoke('seedance2:listTemplates'),
+    createTemplate: (input) => ipcRenderer.invoke('seedance2:createTemplate', input),
+    updateTemplate: (id, patch) => ipcRenderer.invoke('seedance2:updateTemplate', { id, patch }),
+    deleteTemplate: (id) => ipcRenderer.invoke('seedance2:deleteTemplate', id),
+    listPresets: () => ipcRenderer.invoke('seedance2:listPresets'),
+    createPreset: (input) => ipcRenderer.invoke('seedance2:createPreset', input),
+    updatePreset: (id, patch) => ipcRenderer.invoke('seedance2:updatePreset', { id, patch }),
+    deletePreset: (id) => ipcRenderer.invoke('seedance2:deletePreset', id)
+  },
   system: {
     clipboardImport: () => ipcRenderer.invoke('system:clipboardImport'),
     openMainWindow: () => ipcRenderer.invoke('system:openMainWindow'),

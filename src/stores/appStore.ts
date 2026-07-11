@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type AppView = 'library' | 'test-bench' | 'settings'
+export type AppView = 'library' | 'test-bench' | 'seedance2' | 'settings'
 
 interface AppState {
   currentView: AppView

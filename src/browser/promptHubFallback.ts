@@ -83,7 +83,15 @@ function createTitle(content: string) {
 
 function normalizePrompt(prompt: PromptRecord): PromptRecord {
   // Localstorage entries from previous app versions may lack newer fields.
-  return { ...prompt, notes: prompt.notes ?? '', previewImage: prompt.previewImage ?? '' }
+  const images = (prompt.previewImages ?? (prompt.previewImage ? [prompt.previewImage] : []))
+    .filter((s): s is string => typeof s === 'string' && s.length > 0)
+    .slice(0, 3)
+  return {
+    ...prompt,
+    notes: prompt.notes ?? '',
+    previewImage: images[0] ?? '',
+    previewImages: images
+  }
 }
 
 function sortPromptsByUpdatedAt(prompts: PromptRecord[]) {
@@ -141,7 +149,10 @@ function createPromptHubFallback(): PromptHubApi {
           notes: input.notes ?? '',
           tags: [...(input.tags ?? [])],
           params: cloneValue(input.params ?? {}),
-          previewImage: input.previewImage ?? '',
+          previewImage: (input.previewImages?.[0] ?? input.previewImage) ?? '',
+          previewImages: (input.previewImages ?? (input.previewImage ? [input.previewImage] : []))
+            .filter((s): s is string => typeof s === 'string' && s.length > 0)
+            .slice(0, 3),
           isFavorite: input.isFavorite ?? false,
           lastUsedAt: input.lastUsedAt ?? null,
           lastGeneratedAt: input.lastGeneratedAt ?? null,
@@ -162,12 +173,25 @@ function createPromptHubFallback(): PromptHubApi {
           throw new Error(`Prompt not found: ${id}`)
         }
 
+        let nextImages: string[]
+        if (patch.previewImages !== undefined) {
+          nextImages = patch.previewImages
+            .filter((s): s is string => typeof s === 'string' && s.length > 0)
+            .slice(0, 3)
+        } else if (patch.previewImage !== undefined) {
+          nextImages = patch.previewImage ? [patch.previewImage] : []
+        } else {
+          nextImages = current.previewImages ?? (current.previewImage ? [current.previewImage] : [])
+        }
+
         const updated: PromptRecord = {
           ...current,
           ...cloneValue(patch),
           title: patch.title?.trim() || current.title,
           tags: patch.tags ? [...patch.tags] : current.tags,
           params: patch.params ? cloneValue(patch.params) : current.params,
+          previewImage: nextImages[0] ?? '',
+          previewImages: nextImages,
           updatedAt: new Date().toISOString()
         }
 
@@ -251,6 +275,46 @@ function createPromptHubFallback(): PromptHubApi {
       async sdWebuiGenerate() {
         throw new Error('当前为浏览器演示模式，请改用「Mock」provider 体验流程')
       }
+    },
+    seedance2: {
+      async listTemplates() {
+        return []
+      },
+      async createTemplate(input) {
+        const now = new Date().toISOString()
+        return { id: crypto.randomUUID(), title: input.title, data: input.data, createdAt: now, updatedAt: now }
+      },
+      async updateTemplate(id, patch) {
+        const now = new Date().toISOString()
+        return { id, title: patch.title, data: patch.data, createdAt: now, updatedAt: now }
+      },
+      async deleteTemplate() {},
+      async listPresets() {
+        return []
+      },
+      async createPreset(input) {
+        const now = new Date().toISOString()
+        return {
+          id: crypto.randomUUID(),
+          name: input.name,
+          tags: input.tags ?? [],
+          segment: input.segment,
+          createdAt: now,
+          updatedAt: now
+        }
+      },
+      async updatePreset(id, patch) {
+        const now = new Date().toISOString()
+        return {
+          id,
+          name: patch.name,
+          tags: patch.tags ?? [],
+          segment: patch.segment,
+          createdAt: now,
+          updatedAt: now
+        }
+      },
+      async deletePreset() {}
     },
     system: {
       async clipboardImport() {

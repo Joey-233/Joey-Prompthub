@@ -38,12 +38,12 @@ export function OptimizePromptDialog({
   }
 
   return (
-    <div className="dialog-backdrop">
-      <div className="dialog-panel">
+    <div className="dialog-backdrop" onClick={onClose}>
+      <div className="dialog-panel" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-header">
           <h3 className="dialog-title">AI 优化</h3>
-          <button className="editor-action" type="button" onClick={onClose}>
-            关闭
+          <button className="dialog-close" type="button" aria-label="关闭" onClick={onClose}>
+            ×
           </button>
         </div>
 

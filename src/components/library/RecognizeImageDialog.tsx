@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 
 import { describeImage } from '../../services/ai'
 import { readImageFileAsDataUrl } from '../../lib/imageFile'
@@ -39,6 +39,15 @@ export function RecognizeImageDialog({
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [modeId, setModeId] = useState(MODES[0].id)
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   const [imageDataUrl, setImageDataUrl] = useState('')
   const [result, setResult] = useState('')
   const [loading, setLoading] = useState(false)
@@ -91,12 +100,12 @@ export function RecognizeImageDialog({
   }
 
   return (
-    <div className="dialog-backdrop">
-      <div className="dialog-panel">
+    <div className="dialog-backdrop" onClick={onClose}>
+      <div className="dialog-panel" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-header">
           <h3 className="dialog-title">识图生成提示词</h3>
-          <button className="editor-action" type="button" onClick={onClose}>
-            关闭
+          <button className="dialog-close" type="button" aria-label="关闭" onClick={onClose}>
+            ×
           </button>
         </div>
 

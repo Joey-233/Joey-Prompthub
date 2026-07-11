@@ -5,6 +5,7 @@ import { useAppStore, type AppView } from '../../stores/appStore'
 const tabs: Array<{ label: string; view: AppView }> = [
   { label: '提示词库', view: 'library' },
   { label: '测试台', view: 'test-bench' },
+  { label: 'Seedance2 模板', view: 'seedance2' },
   { label: '设置', view: 'settings' }
 ]
 

@@ -35,6 +35,23 @@ export function registerIpc(
     secretStore.delete(key)
   })
 
+  ipcMain.handle('seedance2:listTemplates', () => database.seedance2.listTemplates())
+  ipcMain.handle('seedance2:createTemplate', (_event, input) => database.seedance2.createTemplate(input))
+  ipcMain.handle('seedance2:updateTemplate', (_event, payload) =>
+    database.seedance2.updateTemplate(payload.id, payload.patch)
+  )
+  ipcMain.handle('seedance2:deleteTemplate', (_event, id: string) => {
+    database.seedance2.deleteTemplate(id)
+  })
+  ipcMain.handle('seedance2:listPresets', () => database.seedance2.listPresets())
+  ipcMain.handle('seedance2:createPreset', (_event, input) => database.seedance2.createPreset(input))
+  ipcMain.handle('seedance2:updatePreset', (_event, payload) =>
+    database.seedance2.updatePreset(payload.id, payload.patch)
+  )
+  ipcMain.handle('seedance2:deletePreset', (_event, id: string) => {
+    database.seedance2.deletePreset(id)
+  })
+
   ipcMain.handle('ai:optimize', (_event, input) => callAiOptimize(database, input))
   ipcMain.handle('ai:describeImage', (_event, input) => callAiVision(database, input))
   ipcMain.handle('image:openaiGenerate', (_event, input) => callOpenaiImage(database, input))

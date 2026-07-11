@@ -8,13 +8,21 @@ import { useAppStore } from '../../stores/appStore'
 import { usePromptStore } from '../../stores/promptStore'
 import { OptimizePromptDialog } from './OptimizePromptDialog'
 
+const MAX_PREVIEW_IMAGES = 3
+
+function getImages(prompt: PromptRecord): string[] {
+  if (prompt.previewImages && prompt.previewImages.length > 0) return prompt.previewImages
+  if (prompt.previewImage) return [prompt.previewImage]
+  return []
+}
+
 function buildDraftPatch(draft: PromptRecord) {
   return {
     content: draft.content,
     notes: draft.notes,
     tags: draft.tags,
     params: draft.params,
-    previewImage: draft.previewImage ?? ''
+    previewImages: getImages(draft)
   }
 }
 
@@ -22,7 +30,7 @@ function hasDraftChanges(draft: PromptRecord, source: PromptRecord) {
   return (
     draft.content !== source.content ||
     draft.notes !== source.notes ||
-    (draft.previewImage ?? '') !== (source.previewImage ?? '') ||
+    JSON.stringify(getImages(draft)) !== JSON.stringify(getImages(source)) ||
     JSON.stringify(draft.tags) !== JSON.stringify(source.tags) ||
     JSON.stringify(draft.params) !== JSON.stringify(source.params)
   )
@@ -68,26 +76,80 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
     setPreviewError('')
   }, [prompt])
 
-  async function handlePreviewFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) {
+  // Ctrl+V 粘贴图片：从剪贴板抓 image/* 项加入预览
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      const items = e.clipboardData?.items
+      if (!items) return
+      const files: File[] = []
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i]
+        if (it.kind === 'file' && it.type.startsWith('image/')) {
+          const f = it.getAsFile()
+          if (f) files.push(f)
+        }
+      }
+      if (files.length > 0) {
+        e.preventDefault()
+        void appendPreviewFiles(files)
+      }
+    }
+    window.addEventListener('paste', onPaste)
+    return () => window.removeEventListener('paste', onPaste)
+    // appendPreviewFiles 读 draft（用最新闭包就好），重订阅成本低
+  }, [draft])
+
+  function handleDropFiles(e: React.DragEvent) {
+    e.preventDefault()
+    void appendPreviewFiles(e.dataTransfer.files)
+  }
+
+  async function appendPreviewFiles(files: FileList | File[] | null) {
+    if (!files || files.length === 0) return
+    setPreviewError('')
+    const current = getImages(draft)
+    const remaining = MAX_PREVIEW_IMAGES - current.length
+    if (remaining <= 0) {
+      setPreviewError(`最多 ${MAX_PREVIEW_IMAGES} 张，先移除一张再上传`)
       return
     }
 
-    setPreviewError('')
-    try {
-      // 压到 512px JPEG 再进 SQLite，控制行体积，列表加载不被拖慢
-      const dataUrl = await readImageFileAsDataUrl(file, {
-        maxDimension: 512,
-        quality: 0.8
-      })
-      setDraft((current) => ({ ...current, previewImage: dataUrl }))
-    } catch (caughtError) {
-      setPreviewError(
-        caughtError instanceof Error ? caughtError.message : '预览图读取失败'
-      )
+    const accepted: File[] = []
+    for (const f of Array.from(files)) {
+      if (f.type.startsWith('image/')) accepted.push(f)
+      if (accepted.length >= remaining) break
     }
+    if (accepted.length === 0) return
+
+    try {
+      const dataUrls = await Promise.all(
+        accepted.map((file) =>
+          readImageFileAsDataUrl(file, { maxDimension: 512, quality: 0.8 })
+        )
+      )
+      const next = [...current, ...dataUrls].slice(0, MAX_PREVIEW_IMAGES)
+      setDraft((c) => ({ ...c, previewImages: next, previewImage: next[0] ?? '' }))
+    } catch (err) {
+      setPreviewError(err instanceof Error ? err.message : '预览图读取失败')
+    }
+  }
+
+  function replacePreviewAt(index: number, dataUrl: string | null) {
+    setDraft((c) => {
+      const list = [...getImages(c)]
+      if (dataUrl === null) {
+        list.splice(index, 1)
+      } else {
+        list[index] = dataUrl
+      }
+      return { ...c, previewImages: list, previewImage: list[0] ?? '' }
+    })
+  }
+
+  async function handlePreviewFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = event.target.files
+    event.target.value = ''
+    await appendPreviewFiles(files)
   }
 
   useDebouncedEffect(
@@ -148,45 +210,45 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
         </label>
 
         <div className="field">
-          <span className="field-label">预览图</span>
-          {draft.previewImage ? (
-            <div className="editor-preview">
-              <img
-                alt="提示词预览图"
-                className="editor-preview-image"
-                src={draft.previewImage}
-              />
-              <div className="editor-preview-actions">
+          <span className="field-label">
+            预览图（最多 {MAX_PREVIEW_IMAGES} 张，hover 卡片可轮播）
+          </span>
+          <div
+            className="editor-preview-grid"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={handleDropFiles}
+          >
+            {getImages(draft).map((src, idx) => (
+              <div className="editor-preview-slot" key={`${idx}-${src.slice(-12)}`}>
+                <img alt={`预览图 ${idx + 1}`} className="editor-preview-slot-image" src={src} />
                 <button
-                  className="editor-action"
+                  aria-label="移除该预览图"
+                  className="editor-preview-slot-remove"
                   type="button"
-                  onClick={() => previewInputRef.current?.click()}
+                  onClick={() => replacePreviewAt(idx, null)}
                 >
-                  更换预览图
-                </button>
-                <button
-                  className="editor-action editor-action-danger"
-                  type="button"
-                  onClick={() =>
-                    setDraft((current) => ({ ...current, previewImage: '' }))
-                  }
-                >
-                  移除预览图
+                  ×
                 </button>
               </div>
-            </div>
-          ) : (
-            <button
-              className="editor-action editor-preview-upload"
-              type="button"
-              onClick={() => previewInputRef.current?.click()}
-            >
-              上传预览图
-            </button>
-          )}
+            ))}
+            {getImages(draft).length < MAX_PREVIEW_IMAGES && (
+              <button
+                className="editor-preview-slot editor-preview-slot-add"
+                type="button"
+                onClick={() => previewInputRef.current?.click()}
+                title="点击上传 / Ctrl+V 粘贴 / 拖入图片"
+              >
+                <span className="editor-preview-slot-add-plus">+</span>
+                <span className="editor-preview-slot-add-hint">
+                  上传 · 粘贴 · 拖入
+                </span>
+              </button>
+            )}
+          </div>
           <input
             ref={previewInputRef}
             hidden
+            multiple
             accept="image/*"
             aria-label="上传预览图文件"
             type="file"
