@@ -85,4 +85,18 @@ describe('promptStore update sequencing', () => {
     await loading
     expect(usePromptStore.getState().prompts[0].content).toBe('edited')
   })
+
+  it('keeps the newest load result when concurrent loads resolve in reverse order', async () => {
+    const older = deferred<PromptRecord[]>()
+    const newer = deferred<PromptRecord[]>()
+    window.promptHub.prompts.list = vi.fn().mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise)
+    const olderLoad = usePromptStore.getState().loadPrompts()
+    const newerLoad = usePromptStore.getState().loadPrompts()
+    newer.resolve([prompt('newer', 'new list')])
+    await newerLoad
+    expect(usePromptStore.getState().prompts[0].id).toBe('newer')
+    older.resolve([prompt('older', 'old list')])
+    await olderLoad
+    expect(usePromptStore.getState().prompts[0].id).toBe('newer')
+  })
 })

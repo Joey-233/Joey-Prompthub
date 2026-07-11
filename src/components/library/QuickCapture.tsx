@@ -35,8 +35,7 @@ export function QuickCapture() {
   const [focusWithin, setFocusWithin] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
-  const hasCustomTags = tags.some((tag) => !TYPE_TAGS.includes(tag as (typeof TYPE_TAGS)[number]))
-  const expanded = focusWithin || content.length > 0 || tagDraft.trim().length > 0 || hasCustomTags || showRecognizeDialog
+  const expanded = focusWithin || content.length > 0 || tagDraft.trim().length > 0 || tags.length > 0 || showRecognizeDialog
 
   useEffect(() => {
     const input = inputRef.current

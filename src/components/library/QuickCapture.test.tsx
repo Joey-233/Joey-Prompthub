@@ -93,6 +93,19 @@ describe('QuickCapture tag entry', () => {
     expect(panel).toHaveAttribute('data-expanded', 'false')
   })
 
+  it('keeps a type-only capture expanded until the type tag is cleared', async () => {
+    const user = userEvent.setup()
+    render(<QuickCapture />)
+    const panel = screen.getByLabelText('快速录入').closest('form')!
+    await user.click(screen.getByLabelText('快速录入'))
+    await user.click(screen.getByRole('button', { name: '绘图' }))
+    await user.click(document.body)
+    expect(panel).toHaveAttribute('data-expanded', 'true')
+    await user.click(screen.getByRole('button', { name: '绘图' }))
+    await user.click(document.body)
+    expect(panel).toHaveAttribute('data-expanded', 'false')
+  })
+
   it('passes typed tags to createPrompt on save', async () => {
     const user = userEvent.setup()
     const create = vi.fn().mockResolvedValue(makePrompt({ id: 'new' }))

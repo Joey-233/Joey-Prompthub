@@ -41,6 +41,7 @@ function isPromptRecord(value: unknown): value is PromptRecord {
 export const usePromptStore = create<PromptState>((set, get) => {
   const fieldVersions = new Map<string, Map<keyof UpdatePromptInput, number>>()
   let mutationEpoch = 0
+  let loadSequence = 0
 
   async function mutatePrompt(id: string, patch: UpdatePromptInput) {
     mutationEpoch += 1
@@ -77,10 +78,12 @@ export const usePromptStore = create<PromptState>((set, get) => {
   search: '',
   selectedPromptId: null,
   async loadPrompts() {
+    const sequence = ++loadSequence
     const loadEpoch = mutationEpoch
     set({ loading: true })
     try {
       const prompts = await window.promptHub.prompts.list()
+      if (sequence !== loadSequence) return
       if (loadEpoch !== mutationEpoch) {
         set({ loading: false })
         return
@@ -95,7 +98,7 @@ export const usePromptStore = create<PromptState>((set, get) => {
             : prompts[0]?.id ?? null
       }))
     } catch {
-      set({ loading: false })
+      if (sequence === loadSequence) set({ loading: false })
     }
   },
   async createPrompt(input) {
