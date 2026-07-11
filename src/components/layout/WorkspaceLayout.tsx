@@ -41,6 +41,7 @@ export function WorkspaceLayout({ resource, resourceLabel = '资源', main, deta
   const setPaneWidth = useAppStore((state) => state.setPaneWidth)
   const setPaneCollapsed = useAppStore((state) => state.setPaneCollapsed)
   const [drawer, setDrawer] = useState<Pane | null>(null)
+  const drawerRef = useRef<HTMLElement>(null)
   const resourceTrigger = useRef<HTMLButtonElement>(null)
   const detailTrigger = useRef<HTMLButtonElement>(null)
 
@@ -52,8 +53,26 @@ export function WorkspaceLayout({ resource, resourceLabel = '资源', main, deta
 
   useEffect(() => {
     if (!drawer) return
+    const panel = drawerRef.current
+    const focusable = () => Array.from(panel?.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])') ?? []).filter((element) => !element.hasAttribute('disabled'))
+    focusable()[0]?.focus()
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') closeDrawer()
+      if (event.key === 'Escape') {
+        closeDrawer()
+        return
+      }
+      if (event.key !== 'Tab') return
+      const items = focusable()
+      if (items.length === 0) return
+      const first = items[0]
+      const last = items[items.length - 1]
+      if (items.length === 1 || (!event.shiftKey && document.activeElement === last)) {
+        event.preventDefault()
+        first.focus()
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -91,11 +110,11 @@ export function WorkspaceLayout({ resource, resourceLabel = '资源', main, deta
         {detail && (breakpoint === 'desktop' ? <button type="button" onClick={() => setPaneCollapsed('detail', !layout.detailCollapsed)}>{layout.detailCollapsed ? '展开详情面板' : '收起详情面板'}</button> : <button ref={detailTrigger} type="button" onClick={() => setDrawer('detail')}>打开详情面板</button>)}
       </div>
       <div className="workspace-panes">
-        {inlineResource && <><aside className="workspace-pane resource-pane" role="region" aria-label={resourceLabel}>{resource}</aside>{separator('resource')}</>}
-        <section className="workspace-main">{main}</section>
-        {inlineDetail && <>{separator('detail')}<aside className="workspace-pane detail-pane" role="region" aria-label={detailLabel}>{detail}</aside></>}
+        {inlineResource && <><aside className="workspace-pane resource-pane" role="region" aria-label={resourceLabel} style={{ minWidth: 180, flexShrink: 1 }}>{resource}</aside>{separator('resource')}</>}
+        <section className="workspace-main" style={{ minWidth: 480 }}>{main}</section>
+        {inlineDetail && <>{separator('detail')}<aside className="workspace-pane detail-pane" role="region" aria-label={detailLabel} style={{ minWidth: 280, flexShrink: 1 }}>{detail}</aside></>}
       </div>
-      {drawer && drawerContent && <div className="drawer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDrawer() }}><aside className="workspace-drawer" role="dialog" aria-modal="true" aria-label={drawerLabel}><button type="button" onClick={closeDrawer}>关闭{drawerLabel}面板</button>{drawerContent}</aside></div>}
+      {drawer && drawerContent && <div className="drawer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDrawer() }}><aside ref={drawerRef} className="workspace-drawer" role="dialog" aria-modal="true" aria-label={drawerLabel}><button type="button" onClick={closeDrawer}>关闭{drawerLabel}面板</button>{drawerContent}</aside></div>}
     </div>
   )
 }

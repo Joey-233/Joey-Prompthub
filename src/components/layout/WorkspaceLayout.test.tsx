@@ -1,20 +1,36 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useAppStore } from '../../stores/appStore'
 import { WorkspaceLayout } from './WorkspaceLayout'
 
-function setViewport(width: number) {
+function mockViewport(initialWidth: number) {
+  let width = initialWidth
+  const listeners = new Map<string, Set<() => void>>()
+  const removeEventListener = vi.fn((event: string, listener: () => void) => {
+    if (event === 'change') listeners.forEach((set) => set.delete(listener))
+  })
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
-    value: vi.fn().mockImplementation((query: string) => ({
-      matches: query.includes('1320') ? width >= 1320 : width >= 1024,
-      media: query,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn()
-    }))
+    value: vi.fn().mockImplementation((query: string) => {
+      const callbacks = listeners.get(query) ?? new Set<() => void>()
+      listeners.set(query, callbacks)
+      return {
+        get matches() { return query.includes('1320') ? width >= 1320 : width >= 1024 },
+        media: query,
+        addEventListener: (event: string, listener: () => void) => { if (event === 'change') callbacks.add(listener) },
+        removeEventListener
+      }
+    })
   })
+  return {
+    setWidth(next: number) {
+      width = next
+      listeners.forEach((callbacks) => callbacks.forEach((callback) => callback()))
+    },
+    removeEventListener
+  }
 }
 
 const layout = () => (
@@ -22,13 +38,13 @@ const layout = () => (
     resource={<p>资源内容</p>}
     resourceLabel="资源"
     main={<p>主内容</p>}
-    detail={<p>详情内容</p>}
+    detail={<><p>详情内容</p><a href="#detail-action">详情操作</a></>}
     detailLabel="详情"
   />
 )
 
 describe('WorkspaceLayout', () => {
-  beforeEach(() => setViewport(1400))
+  beforeEach(() => mockViewport(1400))
 
   it('renders three inline panes and accessible keyboard separators on desktop', async () => {
     const user = userEvent.setup()
@@ -36,6 +52,9 @@ describe('WorkspaceLayout', () => {
 
     expect(screen.getByRole('region', { name: '资源' })).toBeVisible()
     expect(screen.getByRole('region', { name: '详情' })).toBeVisible()
+    expect(screen.getByText('主内容').parentElement).toHaveStyle({ minWidth: '480px' })
+    expect(screen.getByRole('region', { name: '资源' })).toHaveStyle({ minWidth: '180px', flexShrink: '1' })
+    expect(screen.getByRole('region', { name: '详情' })).toHaveStyle({ minWidth: '280px', flexShrink: '1' })
     const resourceSeparator = screen.getByRole('separator', { name: '调整资源面板宽度' })
     expect(resourceSeparator).toHaveAttribute('aria-orientation', 'vertical')
     expect(resourceSeparator).toHaveAttribute('aria-valuenow', '220')
@@ -58,7 +77,7 @@ describe('WorkspaceLayout', () => {
   })
 
   it('moves detail to a single accessible drawer on tablet', async () => {
-    setViewport(1100)
+    mockViewport(1100)
     const user = userEvent.setup()
     render(layout())
     expect(screen.getByText('资源内容')).toBeVisible()
@@ -68,7 +87,7 @@ describe('WorkspaceLayout', () => {
   })
 
   it('uses mutually exclusive auxiliary drawers on mobile', async () => {
-    setViewport(800)
+    mockViewport(800)
     const user = userEvent.setup()
     render(layout())
     await user.click(screen.getByRole('button', { name: '打开资源面板' }))
@@ -80,13 +99,38 @@ describe('WorkspaceLayout', () => {
   })
 
   it('closes a drawer with Escape and restores focus to its trigger', async () => {
-    setViewport(800)
+    mockViewport(800)
     const user = userEvent.setup()
     render(layout())
     const trigger = screen.getByRole('button', { name: '打开详情面板' })
     await user.click(trigger)
+    const close = screen.getByRole('button', { name: '关闭详情面板' })
+    const action = screen.getByRole('link', { name: '详情操作' })
+    expect(close).toHaveFocus()
+    await user.tab()
+    expect(action).toHaveFocus()
+    await user.tab()
+    expect(close).toHaveFocus()
+    await user.tab({ shift: true })
+    expect(action).toHaveFocus()
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(trigger).toHaveFocus()
+  })
+
+  it('reacts to breakpoint changes, closes drawers, and removes media listeners', async () => {
+    const viewport = mockViewport(800)
+    const user = userEvent.setup()
+    const rendered = render(layout())
+    await user.click(screen.getByRole('button', { name: '打开详情面板' }))
+    expect(screen.getByRole('dialog', { name: '详情' })).toBeVisible()
+
+    act(() => viewport.setWidth(1400))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '资源' })).toBeVisible()
+    expect(screen.getByRole('region', { name: '详情' })).toBeVisible()
+
+    rendered.unmount()
+    expect(viewport.removeEventListener).toHaveBeenCalledTimes(2)
   })
 })
