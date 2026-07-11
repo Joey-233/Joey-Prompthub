@@ -1,14 +1,17 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 
 import { GenerationGrid } from '../components/test-bench/GenerationGrid'
 import { HistoryPanel } from '../components/test-bench/HistoryPanel'
 import { PromptList } from '../components/test-bench/PromptList'
 import { PromptWorkbench } from '../components/test-bench/PromptWorkbench'
+import { GenerationSettingsPanel } from '../components/test-bench/GenerationSettingsPanel'
+import { WorkspaceLayout } from '../components/layout/WorkspaceLayout'
 import { useAppStore } from '../stores/appStore'
 import { useTestBenchStore } from '../stores/testBenchStore'
 
 export function TestBench() {
+  const [activeCanvas, setActiveCanvas] = useState<'results' | 'history'>('results')
   const {
     prompts,
     selectedPromptId,
@@ -116,46 +119,35 @@ export function TestBench() {
     )
   }
 
-  return (
-    <section className="test-bench-layout">
-      <PromptList
+  const resource = <PromptList
         prompts={prompts}
         selectedPromptId={selectedPromptId}
         onSelect={selectPrompt}
       />
-      <div className="test-bench-content">
-        <header className="view-heading view-heading-compact">
-          <span className="view-eyebrow">Prompt Lab</span>
-          <div>
-            <h2 className="view-title">测试台</h2>
-            <p className="view-description">
-              对绘图提示词做临时编辑和参数试跑，确认满意后再同步回提示词库。
-            </p>
-          </div>
-        </header>
+  const main = <main className="test-bench-content" aria-label="生成结果">
         <PromptWorkbench
           content={draftContent}
           loading={loading}
           canSave={canSave}
           saveStatus={saveStatus}
-          providerId={providerId}
-          params={params}
-          generateError={generateError}
           onContentChange={setDraftContent}
-          onProviderChange={setProviderId}
-          onParamsChange={setParams}
           onSave={() => void saveDraft()}
-          onGenerate={() => void generate()}
         />
-        <HistoryPanel
+        <div className="bench-canvas-tabs" role="tablist" aria-label="生成画布">
+          <button role="tab" aria-selected={activeCanvas === 'results'} onClick={() => setActiveCanvas('results')}>本轮结果</button>
+          <button role="tab" aria-selected={activeCanvas === 'history'} onClick={() => setActiveCanvas('history')}>历史记录</button>
+        </div>
+        <section className="bench-result-canvas">
+        {generateError ? <div className="bench-error" role="alert"><span>{generateError}</span><button type="button" onClick={() => { setActiveCanvas('results'); void generate() }}>重试生成</button></div> : null}
+        {activeCanvas === 'history' ? <HistoryPanel
           history={visibleHistory}
           prompts={prompts}
           scope={historyScope}
           onScopeChange={setHistoryScope}
-          onRestore={restoreHistoryEntry}
-        />
-        <GenerationGrid results={results} />
-      </div>
-    </section>
-  )
+          onRestore={(entryId) => { restoreHistoryEntry(entryId); setActiveCanvas('results') }}
+        /> : <GenerationGrid results={results} />}
+        </section>
+      </main>
+  const detail = <GenerationSettingsPanel content={draftContent} loading={loading} providerId={providerId} params={params} onProviderChange={setProviderId} onParamsChange={setParams} onGenerate={() => { setActiveCanvas('results'); void generate() }} />
+  return <WorkspaceLayout resource={resource} resourceLabel="绘图提示词" main={main} detail={detail} detailLabel="生成参数" />
 }

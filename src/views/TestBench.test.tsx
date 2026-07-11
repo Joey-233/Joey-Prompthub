@@ -37,6 +37,42 @@ const imagePrompts: PromptRecord[] = [
 ]
 
 describe('TestBench', () => {
+  it('uses named workspace regions and switches the shared canvas between results and history', async () => {
+    const user = userEvent.setup()
+    window.promptHub.prompts.list = vi.fn().mockResolvedValue(imagePrompts)
+
+    render(<TestBench />)
+
+    expect(await screen.findByRole('region', { name: '绘图提示词' })).toBeInTheDocument()
+    expect(screen.getByRole('main', { name: '生成结果' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '生成参数' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '本轮结果' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByText('历史生成')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: '历史记录' }))
+    expect(screen.getByRole('tab', { name: '历史记录' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText('历史生成')).toBeInTheDocument()
+    expect(screen.queryByText('点击「生成」后图像会出现在这里')).not.toBeInTheDocument()
+  })
+
+  it('keeps successful results visible when a later generation fails and retries', async () => {
+    const user = userEvent.setup()
+    window.promptHub.prompts.list = vi.fn().mockResolvedValue(imagePrompts)
+    window.promptHub.generations.create = vi.fn().mockResolvedValue(null)
+    window.promptHub.prompts.update = vi.fn().mockImplementation(async (id, patch) => ({ ...imagePrompts.find((prompt) => prompt.id === id)!, ...patch }))
+
+    render(<TestBench />)
+    await screen.findByText('赛博朋克街景')
+    await user.click(screen.getByRole('button', { name: '生成' }))
+    expect(await screen.findAllByAltText('赛博朋克街景')).toHaveLength(3)
+
+    window.promptHub.generations.create = vi.fn().mockRejectedValue(new Error('write failed'))
+    await user.click(screen.getByRole('button', { name: '生成' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('write failed')
+    expect(screen.getAllByAltText('赛博朋克街景')).toHaveLength(3)
+    await user.click(screen.getByRole('button', { name: '重试生成' }))
+    expect(window.promptHub.generations.create).toHaveBeenCalled()
+  })
   it('loads an image prompt into the workbench and shows generated mock results', async () => {
     const user = userEvent.setup()
 
@@ -129,6 +165,7 @@ describe('TestBench', () => {
 
     render(<TestBench />)
 
+    await user.click(await screen.findByRole('tab', { name: '历史记录' }))
     await user.click(await screen.findByRole('button', { name: '恢复历史：赛博朋克街景' }))
 
     expect(screen.getByDisplayValue('restored prompt snapshot')).toBeInTheDocument()
@@ -154,6 +191,7 @@ describe('TestBench', () => {
 
     render(<TestBench />)
 
+    await user.click(await screen.findByRole('tab', { name: '历史记录' }))
     expect(await screen.findByText('原提示词已删除')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '恢复历史：已删除的提示词' }))
     expect(screen.getByDisplayValue('abandoned ruins')).toBeInTheDocument()

@@ -185,7 +185,7 @@ export const useTestBenchStore = create<TestBenchState>((set, get) => ({
     )
     const timestamp = new Date().toISOString()
 
-    set({ loading: true, generateError: null, results: [] })
+    set({ loading: true, generateError: null })
 
     try {
       const outcome = await generateWithProvider(state.providerId, {
