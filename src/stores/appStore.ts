@@ -91,12 +91,12 @@ export const useAppStore = create<AppState>((set) => ({
     }),
   setPaneWidth: (pane, width) =>
     set((state) => {
+      if (!Number.isFinite(width)) return state
+
       const key = pane === 'resource' ? 'resourceWidth' : 'detailWidth'
       const layout = {
         ...state.layout,
-        [key]: Number.isFinite(width)
-          ? clamp(width, pane === 'resource' ? 180 : 280, pane === 'resource' ? 320 : 480)
-          : state.layout[key]
+        [key]: clamp(width, pane === 'resource' ? 180 : 280, pane === 'resource' ? 320 : 480)
       }
       persistLayout(layout)
       return { layout }

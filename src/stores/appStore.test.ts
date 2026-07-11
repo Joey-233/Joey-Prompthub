@@ -92,12 +92,18 @@ describe('appStore layout preferences', () => {
 
   it('ignores non-finite width updates', async () => {
     const store = await loadStore()
+    const initialLayout = store.getState().layout
+    const listener = vi.fn()
+    const unsubscribe = store.subscribe(listener)
+    const storageSpy = vi.spyOn(Storage.prototype, 'setItem')
 
     store.getState().setPaneWidth('resource', Number.NaN)
     store.getState().setPaneWidth('detail', Number.POSITIVE_INFINITY)
 
-    expect(store.getState().layout.resourceWidth).toBe(220)
-    expect(store.getState().layout.detailWidth).toBe(320)
+    expect(store.getState().layout).toBe(initialLayout)
+    expect(listener).not.toHaveBeenCalled()
+    expect(storageSpy).not.toHaveBeenCalled()
+    unsubscribe()
   })
 
   it('resets and persists only layout without changing navigation state', async () => {

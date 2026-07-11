@@ -7,6 +7,7 @@ import { useTestBenchStore } from '../stores/testBenchStore'
 
 beforeEach(() => {
   if (typeof window !== 'undefined') {
+    window.localStorage.removeItem('prompthub:layout')
     Object.defineProperty(window, 'promptHub', {
       configurable: true,
       value: {
@@ -91,8 +92,16 @@ beforeEach(() => {
     })
   }
 
-  useAppStore.setState({ currentView: 'library' })
-  useAppStore.setState({ pendingTestBenchPromptId: null })
+  useAppStore.setState({
+    currentView: 'library',
+    pendingTestBenchPromptId: null,
+    layout: {
+      resourceCollapsed: false,
+      detailCollapsed: false,
+      resourceWidth: 220,
+      detailWidth: 320
+    }
+  })
   usePromptStore.setState({
     prompts: [],
     loading: false,
