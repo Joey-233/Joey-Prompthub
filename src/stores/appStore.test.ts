@@ -97,13 +97,21 @@ describe('appStore layout preferences', () => {
     const unsubscribe = store.subscribe(listener)
     const storageSpy = vi.spyOn(Storage.prototype, 'setItem')
 
-    store.getState().setPaneWidth('resource', Number.NaN)
-    store.getState().setPaneWidth('detail', Number.POSITIVE_INFINITY)
+    try {
+      store.getState().setPaneWidth('resource', Number.NaN)
+      store.getState().setPaneWidth('detail', Number.POSITIVE_INFINITY)
 
-    expect(store.getState().layout).toBe(initialLayout)
-    expect(listener).not.toHaveBeenCalled()
-    expect(storageSpy).not.toHaveBeenCalled()
-    unsubscribe()
+      expect(store.getState().layout).toBe(initialLayout)
+      expect(listener).not.toHaveBeenCalled()
+      expect(storageSpy).not.toHaveBeenCalled()
+    } finally {
+      unsubscribe()
+      storageSpy.mockRestore()
+    }
+  })
+
+  it('does not leak a mocked storage method between tests', () => {
+    expect(vi.isMockFunction(Storage.prototype.setItem)).toBe(false)
   })
 
   it('resets and persists only layout without changing navigation state', async () => {
