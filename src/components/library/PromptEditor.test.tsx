@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -8,6 +8,7 @@ vi.mock('../../lib/imageFile', () => ({
 }))
 
 import type { PromptRecord } from '../../shared/types'
+import { readImageFileAsDataUrl } from '../../lib/imageFile'
 import { PromptEditor } from './PromptEditor'
 
 afterEach(() => {
@@ -70,6 +71,10 @@ describe('PromptEditor', () => {
   })
 
   it('uploads a preview image and saves it through the debounced draft', async () => {
+    let finishImageRead!: (dataUrl: string) => void
+    vi.mocked(readImageFileAsDataUrl).mockImplementationOnce(
+      () => new Promise((resolve) => (finishImageRead = resolve))
+    )
     const updatePrompt = vi.fn().mockResolvedValue({
       ...prompt,
       previewImage: 'data:image/jpeg;base64,RESIZED'
@@ -83,22 +88,25 @@ describe('PromptEditor', () => {
       target: { files: [file] }
     })
 
-    // 读图是异步 mock，先等预览渲染出来
     await waitFor(() => {
-      expect(screen.getByAltText('预览图 1')).toBeInTheDocument()
+      expect(readImageFileAsDataUrl).toHaveBeenCalledWith(file, {
+        maxDimension: 512,
+        quality: 0.8
+      })
     })
 
-    // 真实跑完 800ms debounce 自动保存
-    await waitFor(
-      () => {
-        expect(updatePrompt).toHaveBeenCalledWith(
-          'image-1',
-          expect.objectContaining({
-            previewImages: ['data:image/jpeg;base64,RESIZED']
-          })
-        )
-      },
-      { timeout: 2000 }
+    vi.useFakeTimers()
+    await act(async () => {
+      finishImageRead('data:image/jpeg;base64,RESIZED')
+    })
+    expect(screen.getByAltText('预览图 1')).toBeInTheDocument()
+    await vi.advanceTimersByTimeAsync(850)
+
+    expect(updatePrompt).toHaveBeenCalledWith(
+      'image-1',
+      expect.objectContaining({
+        previewImages: ['data:image/jpeg;base64,RESIZED']
+      })
     )
   })
 

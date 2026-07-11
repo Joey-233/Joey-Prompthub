@@ -53,6 +53,12 @@ vi.mock('better-sqlite3', () => {
     private generations: GenerationRow[] = []
     private seedance2Templates: Seedance2TemplateRow[] = []
     private seedance2Presets: Seedance2PresetRow[] = []
+    private seedance2Timestamp = 0
+
+    private nextSeedance2Timestamp() {
+      this.seedance2Timestamp += 1
+      return `2026-04-19 00:00:${this.seedance2Timestamp.toString().padStart(2, '0')}`
+    }
 
     pragma() {}
 
@@ -266,28 +272,37 @@ vi.mock('better-sqlite3', () => {
         return { run: () => undefined }
       }
 
-      if (normalized.startsWith('insert into seedance2_templates')) {
+      if (
+        normalized ===
+        'insert into seedance2_templates (id, title, data) values (@id, @title, @data)'
+      ) {
         return {
           run: (params: { id: string; title: string; data: string }) => {
+            const timestamp = this.nextSeedance2Timestamp()
             this.seedance2Templates.push({
               ...params,
-              created_at: '2026-04-19 00:00:03',
-              updated_at: '2026-04-19 00:00:03'
+              created_at: timestamp,
+              updated_at: timestamp
             })
           }
         }
       }
 
-      if (normalized.startsWith('update seedance2_templates')) {
+      if (
+        normalized ===
+        "update seedance2_templates set title = @title, data = @data, updated_at = datetime('now') where id = @id"
+      ) {
         return {
           run: (params: { id: string; title: string; data: string }) => {
             const target = this.seedance2Templates.find((row) => row.id === params.id)
-            if (target) Object.assign(target, params, { updated_at: '2026-04-19 00:00:04' })
+            if (target) {
+              Object.assign(target, params, { updated_at: this.nextSeedance2Timestamp() })
+            }
           }
         }
       }
 
-      if (normalized.startsWith('delete from seedance2_templates where id = ?')) {
+      if (normalized === 'delete from seedance2_templates where id = ?') {
         return {
           run: (id: string) => {
             this.seedance2Templates = this.seedance2Templates.filter((row) => row.id !== id)
@@ -295,38 +310,58 @@ vi.mock('better-sqlite3', () => {
         }
       }
 
-      if (normalized.includes('from seedance2_templates where id = ?')) {
+      if (
+        normalized ===
+        'select id, title, data, created_at, updated_at from seedance2_templates where id = ?'
+      ) {
         return {
           get: (id: string) => this.seedance2Templates.find((row) => row.id === id)
         }
       }
 
-      if (normalized.includes('from seedance2_templates order by')) {
-        return { all: () => [...this.seedance2Templates] }
+      if (
+        normalized ===
+        'select id, title, data, created_at, updated_at from seedance2_templates order by datetime(updated_at) desc'
+      ) {
+        return {
+          all: () =>
+            [...this.seedance2Templates].sort((left, right) =>
+              right.updated_at.localeCompare(left.updated_at)
+            )
+        }
       }
 
-      if (normalized.startsWith('insert into seedance2_segment_presets')) {
+      if (
+        normalized ===
+        'insert into seedance2_segment_presets (id, name, tags, segment) values (@id, @name, @tags, @segment)'
+      ) {
         return {
           run: (params: { id: string; name: string; tags: string; segment: string }) => {
+            const timestamp = this.nextSeedance2Timestamp()
             this.seedance2Presets.push({
               ...params,
-              created_at: '2026-04-19 00:00:03',
-              updated_at: '2026-04-19 00:00:03'
+              created_at: timestamp,
+              updated_at: timestamp
             })
           }
         }
       }
 
-      if (normalized.startsWith('update seedance2_segment_presets')) {
+      if (
+        normalized ===
+        "update seedance2_segment_presets set name = @name, tags = @tags, segment = @segment, updated_at = datetime('now') where id = @id"
+      ) {
         return {
           run: (params: { id: string; name: string; tags: string; segment: string }) => {
             const target = this.seedance2Presets.find((row) => row.id === params.id)
-            if (target) Object.assign(target, params, { updated_at: '2026-04-19 00:00:04' })
+            if (target) {
+              Object.assign(target, params, { updated_at: this.nextSeedance2Timestamp() })
+            }
           }
         }
       }
 
-      if (normalized.startsWith('delete from seedance2_segment_presets where id = ?')) {
+      if (normalized === 'delete from seedance2_segment_presets where id = ?') {
         return {
           run: (id: string) => {
             this.seedance2Presets = this.seedance2Presets.filter((row) => row.id !== id)
@@ -334,14 +369,25 @@ vi.mock('better-sqlite3', () => {
         }
       }
 
-      if (normalized.includes('from seedance2_segment_presets where id = ?')) {
+      if (
+        normalized ===
+        'select id, name, tags, segment, created_at, updated_at from seedance2_segment_presets where id = ?'
+      ) {
         return {
           get: (id: string) => this.seedance2Presets.find((row) => row.id === id)
         }
       }
 
-      if (normalized.includes('from seedance2_segment_presets order by')) {
-        return { all: () => [...this.seedance2Presets] }
+      if (
+        normalized ===
+        'select id, name, tags, segment, created_at, updated_at from seedance2_segment_presets order by datetime(updated_at) desc'
+      ) {
+        return {
+          all: () =>
+            [...this.seedance2Presets].sort((left, right) =>
+              right.updated_at.localeCompare(left.updated_at)
+            )
+        }
       }
 
       throw new Error(`Unhandled SQL in fake better-sqlite3: ${sql}`)
@@ -499,8 +545,12 @@ describe('prompt database', () => {
     }
 
     const created = db.seedance2.createTemplate({ title: 'Storyboard', data })
+    const second = db.seedance2.createTemplate({ title: 'Second storyboard', data })
     expect(created).toMatchObject({ title: 'Storyboard', data })
-    expect(db.seedance2.listTemplates()).toEqual([created])
+    expect(db.seedance2.listTemplates().map((template) => template.id)).toEqual([
+      second.id,
+      created.id
+    ])
 
     const updatedData = { ...data, style: 'documentary' }
     const updated = db.seedance2.updateTemplate(created.id, {
@@ -508,8 +558,13 @@ describe('prompt database', () => {
       data: updatedData
     })
     expect(updated).toMatchObject({ title: 'Updated storyboard', data: updatedData })
+    expect(db.seedance2.listTemplates().map((template) => template.id)).toEqual([
+      created.id,
+      second.id
+    ])
 
     db.seedance2.deleteTemplate(created.id)
+    db.seedance2.deleteTemplate(second.id)
     expect(db.seedance2.listTemplates()).toEqual([])
   })
 
@@ -528,8 +583,16 @@ describe('prompt database', () => {
       tags: ['city', 'wide'],
       segment
     })
+    const second = db.seedance2.createPreset({
+      name: 'Second opening',
+      tags: ['city'],
+      segment
+    })
     expect(created).toMatchObject({ name: 'Opening', tags: ['city', 'wide'], segment })
-    expect(db.seedance2.listPresets()).toEqual([created])
+    expect(db.seedance2.listPresets().map((preset) => preset.id)).toEqual([
+      second.id,
+      created.id
+    ])
 
     const updatedSegment = { ...segment, shotType: 'close-up' }
     const updated = db.seedance2.updatePreset(created.id, {
@@ -542,8 +605,13 @@ describe('prompt database', () => {
       tags: ['city'],
       segment: updatedSegment
     })
+    expect(db.seedance2.listPresets().map((preset) => preset.id)).toEqual([
+      created.id,
+      second.id
+    ])
 
     db.seedance2.deletePreset(created.id)
+    db.seedance2.deletePreset(second.id)
     expect(db.seedance2.listPresets()).toEqual([])
   })
 })
