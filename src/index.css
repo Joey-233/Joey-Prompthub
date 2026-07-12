@@ -89,7 +89,7 @@ button {
 .nav-help { margin-top: auto; color: var(--pv-text-muted); text-decoration: none; }
 
 .app-workspace { display: flex; flex: 1; min-width: 0; flex-direction: column; }
-.app-content { flex: 1; min-height: 0; overflow: auto; }
+.app-content { display: flex; flex: 1; min-height: 0; flex-direction: column; overflow: hidden; }
 .command-bar {
   display: flex;
   align-items: center;
@@ -104,7 +104,7 @@ button {
 .command-search { flex: 1; }
 .command-actions { margin-left: auto; }
 
-.workspace-layout { display: flex; height: 100%; min-height: 0; flex-direction: column; }
+.workspace-layout { display: flex; width: 100%; height: 100%; min-height: 0; flex: 1; flex-direction: column; }
 .workspace-tools { display: flex; gap: var(--pv-space-1); min-height: 36px; padding: 4px var(--pv-space-2); border-bottom: 1px solid var(--pv-border); }
 .workspace-tools button, .workspace-drawer > button { border: 1px solid var(--pv-border); border-radius: var(--pv-radius-control); color: var(--pv-text); background: var(--pv-surface); }
 .workspace-panes { display: flex; flex: 1; min-height: 0; }
@@ -884,6 +884,8 @@ button {
 
 .test-bench-layout {
   flex: 1;
+  width: 100%;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.7fr);
   align-content: start;

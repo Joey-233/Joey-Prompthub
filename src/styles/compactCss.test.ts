@@ -16,6 +16,17 @@ function declarations(selector: string) {
 }
 
 describe('compact workspace CSS contract', () => {
+  it('maintains a full-height flex chain from app content into workspaces', () => {
+    expect(declarations('.app-content')).toMatch(/display:\s*flex/)
+    expect(declarations('.app-content')).toMatch(/flex-direction:\s*column/)
+    expect(declarations('.app-content')).toMatch(/min-height:\s*0/)
+    expect(declarations('.app-content')).toMatch(/overflow:\s*hidden/)
+    expect(declarations('.workspace-layout')).toMatch(/flex:\s*1/)
+    expect(declarations('.test-bench-layout')).toMatch(/flex:\s*1/)
+    expect(declarations('.test-bench-layout')).toMatch(/min-height:\s*0/)
+    expect(declarations('.test-bench-layout')).toMatch(/width:\s*100%/)
+  })
+
   it('lets library and test-bench empty states consume and center within their workspace', () => {
     expect(declarations('.prompt-grid-empty')).toMatch(/grid-column:\s*1\s*\/\s*-1/)
     expect(declarations('.prompt-grid-empty')).toMatch(/width:\s*100%/)
