@@ -13,4 +13,12 @@
   --pv-radius-panel: 12px;
   --pv-nav-width: 58px;
   --pv-command-height: 48px;
+
+  /* Compatibility aliases for feature styles while the compact shell uses pv-* tokens. */
+  --surface: var(--pv-surface);
+  --border: var(--pv-border);
+  --text-muted: var(--pv-text-muted);
+  --accent: var(--pv-accent);
+  --accent-soft: rgba(95, 142, 207, 0.16);
+  --danger: var(--pv-danger);
 }

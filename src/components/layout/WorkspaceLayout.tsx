@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 
 import { useAppStore } from '../../stores/appStore'
 
@@ -46,12 +46,20 @@ export function WorkspaceLayout({ resource, resourceLabel = '资源', main, deta
   const drawerRef = useRef<HTMLElement>(null)
   const resourceTrigger = useRef<HTMLButtonElement>(null)
   const detailTrigger = useRef<HTMLButtonElement>(null)
+  const pendingFocus = useRef<HTMLElement | null>(null)
+  const stopResize = useRef<(() => void) | null>(null)
 
   const closeDrawer = () => {
-    const active = drawer
+    pendingFocus.current = (drawer === 'resource' ? resourceTrigger : detailTrigger).current
     setDrawer(null)
-    requestAnimationFrame(() => (active === 'resource' ? resourceTrigger : detailTrigger).current?.focus())
   }
+
+  useEffect(() => {
+    if (drawer || !pendingFocus.current) return
+    const trigger = pendingFocus.current
+    pendingFocus.current = null
+    if (trigger.isConnected) trigger.focus()
+  }, [drawer])
 
   useEffect(() => {
     if (!drawer) return
@@ -80,7 +88,43 @@ export function WorkspaceLayout({ resource, resourceLabel = '资源', main, deta
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [drawer])
 
-  useEffect(() => setDrawer(null), [breakpoint])
+  useEffect(() => {
+    if (!drawer) return
+    pendingFocus.current = (drawer === 'resource' ? resourceTrigger : detailTrigger).current
+    setDrawer(null)
+  }, [breakpoint])
+
+  useEffect(() => () => stopResize.current?.(), [])
+
+  const startResize = (pane: Pane) => (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    stopResize.current?.()
+    const startX = event.clientX
+    const pointerId = event.pointerId
+    const startWidth = pane === 'resource' ? layout.resourceWidth : layout.detailWidth
+    const direction = pane === 'resource' ? 1 : -1
+    const previousUserSelect = document.body.style.userSelect
+    document.body.style.userSelect = 'none'
+    const move = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== pointerId) return
+      setPaneWidth(pane, startWidth + direction * (moveEvent.clientX - startX))
+    }
+    let finish: (finishEvent: PointerEvent) => void
+    const cleanup = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', finish)
+      window.removeEventListener('pointercancel', finish)
+      document.body.style.userSelect = previousUserSelect
+      stopResize.current = null
+    }
+    finish = (finishEvent: PointerEvent) => {
+      if (finishEvent.pointerId === pointerId) cleanup()
+    }
+    stopResize.current = cleanup
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', finish)
+    window.addEventListener('pointercancel', finish)
+  }
 
   const separatorKey = (pane: Pane) => (event: KeyboardEvent<HTMLDivElement>) => {
     const value = pane === 'resource' ? layout.resourceWidth : layout.detailWidth
@@ -97,7 +141,7 @@ export function WorkspaceLayout({ resource, resourceLabel = '资源', main, deta
   const separator = (pane: Pane) => {
     const resourcePane = pane === 'resource'
     const value = resourcePane ? layout.resourceWidth : layout.detailWidth
-    return <div className="pane-separator" role="separator" tabIndex={0} aria-orientation="vertical" aria-label={`调整${resourcePane ? resourceLabel : detailLabel}面板宽度`} aria-valuemin={resourcePane ? 180 : 280} aria-valuemax={resourcePane ? 320 : 480} aria-valuenow={value} onKeyDown={separatorKey(pane)} onDoubleClick={() => setPaneWidth(pane, resourcePane ? 220 : 320)} />
+    return <div className="pane-separator" role="separator" tabIndex={0} aria-orientation="vertical" aria-label={`调整${resourcePane ? resourceLabel : detailLabel}面板宽度`} aria-valuemin={resourcePane ? 180 : 280} aria-valuemax={resourcePane ? 320 : 480} aria-valuenow={value} onKeyDown={separatorKey(pane)} onPointerDown={startResize(pane)} onDoubleClick={() => setPaneWidth(pane, resourcePane ? 220 : 320)} />
   }
 
   const inlineResource = breakpoint !== 'mobile' && resource && !layout.resourceCollapsed

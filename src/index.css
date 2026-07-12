@@ -109,10 +109,10 @@ button {
 .workspace-tools button, .workspace-drawer > button { border: 1px solid var(--pv-border); border-radius: var(--pv-radius-control); color: var(--pv-text); background: var(--pv-surface); }
 .workspace-panes { display: flex; flex: 1; min-height: 0; }
 .workspace-pane, .workspace-main { min-width: 0; overflow: auto; padding: var(--pv-space-3); }
-.resource-pane { width: var(--resource-width); flex: 0 1 var(--resource-width); }
-.detail-pane { width: var(--detail-width); flex: 0 1 var(--detail-width); }
+.resource-pane { width: var(--resource-width, 220px); flex: 0 1 var(--resource-width, 220px); }
+.detail-pane { width: var(--detail-width, 320px); flex: 0 1 var(--detail-width, 320px); }
 .workspace-main { flex: 1 0 480px; }
-.pane-separator { width: 5px; flex: 0 0 5px; cursor: col-resize; background: var(--pv-border); }
+.pane-separator { width: 5px; flex: 0 0 5px; cursor: col-resize; touch-action: none; user-select: none; background: var(--pv-border); }
 .pane-separator:hover, .pane-separator:focus-visible { background: var(--pv-accent); }
 .drawer-backdrop { position: fixed; inset: 0; z-index: 1000; display: flex; justify-content: flex-end; background: rgba(32, 29, 24, 0.36); }
 .workspace-drawer { width: min(86vw, 380px); height: 100%; padding: var(--pv-space-3); overflow: auto; border-radius: var(--pv-radius-panel) 0 0 var(--pv-radius-panel); background: var(--pv-bg); box-shadow: -8px 0 30px rgba(32, 29, 24, 0.18); }

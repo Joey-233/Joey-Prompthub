@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -58,9 +58,10 @@ describe('WorkspaceLayout', () => {
     const resourceSeparator = screen.getByRole('separator', { name: '调整资源面板宽度' })
     expect(resourceSeparator).toHaveAttribute('aria-orientation', 'vertical')
     expect(resourceSeparator).toHaveAttribute('aria-valuenow', '220')
-    await user.type(resourceSeparator, '{arrowright}')
+    resourceSeparator.focus()
+    await user.keyboard('{arrowright}')
     expect(resourceSeparator).toHaveAttribute('aria-valuenow', '228')
-    await user.type(resourceSeparator, '{end}')
+    await user.keyboard('{end}')
     expect(resourceSeparator).toHaveAttribute('aria-valuenow', '320')
     fireEvent.doubleClick(resourceSeparator)
     expect(resourceSeparator).toHaveAttribute('aria-valuenow', '220')
@@ -115,7 +116,49 @@ describe('WorkspaceLayout', () => {
     expect(action).toHaveFocus()
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(trigger).toHaveFocus()
+    await waitFor(() => expect(trigger).toHaveFocus())
+  })
+
+  it.each(['button', 'backdrop'] as const)('restores the exact trigger after closing by %s', async (method) => {
+    mockViewport(800)
+    const user = userEvent.setup()
+    render(layout())
+    const trigger = screen.getByRole('button', { name: '打开详情面板' })
+    await user.click(trigger)
+    if (method === 'button') await user.click(screen.getByRole('button', { name: '关闭详情面板' }))
+    else fireEvent.mouseDown(screen.getByRole('dialog').parentElement!)
+    await waitFor(() => expect(trigger).toHaveFocus())
+  })
+
+  it('resizes both panes with pointer dragging, clamps ranges, and stops after pointer up', () => {
+    render(layout())
+    const resource = screen.getByRole('separator', { name: '调整资源面板宽度' })
+    const detail = screen.getByRole('separator', { name: '调整详情面板宽度' })
+
+    fireEvent.pointerDown(resource, { clientX: 100, pointerId: 1 })
+    expect(document.body).toHaveStyle({ userSelect: 'none' })
+    fireEvent.pointerUp(window, { pointerId: 99 })
+    fireEvent.pointerMove(window, { clientX: 500, pointerId: 1 })
+    expect(resource).toHaveAttribute('aria-valuenow', '320')
+    fireEvent.pointerUp(window, { pointerId: 1 })
+    fireEvent.pointerMove(window, { clientX: 0, pointerId: 1 })
+    expect(resource).toHaveAttribute('aria-valuenow', '320')
+    expect(document.body.style.userSelect).toBe('')
+
+    fireEvent.pointerDown(detail, { clientX: 500, pointerId: 2 })
+    fireEvent.pointerMove(window, { clientX: 900, pointerId: 2 })
+    expect(detail).toHaveAttribute('aria-valuenow', '280')
+    fireEvent.pointerMove(window, { clientX: 0, pointerId: 2 })
+    expect(detail).toHaveAttribute('aria-valuenow', '480')
+    fireEvent.pointerUp(window, { pointerId: 2 })
+  })
+
+  it('cleans up an active resize when unmounted', () => {
+    const rendered = render(layout())
+    fireEvent.pointerDown(screen.getByRole('separator', { name: '调整资源面板宽度' }), { clientX: 100 })
+    expect(document.body.style.userSelect).toBe('none')
+    rendered.unmount()
+    expect(document.body.style.userSelect).toBe('')
   })
 
   it('reacts to breakpoint changes, closes drawers, and removes media listeners', async () => {
