@@ -156,34 +156,36 @@ export function SecretField({
         >
           {status}
         </span>
-        {configured && (
-          <>
-            <button
-              className="editor-action"
-              type="button"
-              disabled={pending}
-              onClick={handleReveal}
-            >
-              {revealed === null ? "显示" : "隐藏"}
-            </button>
-            <button
-              className="editor-action editor-action-danger"
-              type="button"
-              disabled={pending}
-              onClick={handleClear}
-            >
-              清除
-            </button>
-          </>
-        )}
-        <button
-          className="editor-action"
-          type="button"
-          disabled={pending}
-          onClick={handleSave}
-        >
-          {actionLabel}
-        </button>
+        <div className="secret-action-controls">
+          {configured && (
+            <>
+              <button
+                className="editor-action"
+                type="button"
+                disabled={pending}
+                onClick={handleReveal}
+              >
+                {revealed === null ? "显示" : "隐藏"}
+              </button>
+              <button
+                className="editor-action editor-action-danger"
+                type="button"
+                disabled={pending}
+                onClick={handleClear}
+              >
+                清除
+              </button>
+            </>
+          )}
+          <button
+            className="editor-action"
+            type="button"
+            disabled={pending}
+            onClick={handleSave}
+          >
+            {actionLabel}
+          </button>
+        </div>
       </div>
       {revealed !== null && (
         <output className="secret-reveal" aria-label={`${label} 当前值`}>

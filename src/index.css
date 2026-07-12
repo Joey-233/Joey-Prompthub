@@ -577,6 +577,8 @@ button {
 }
 
 .prompt-grid-empty {
+  grid-column: 1 / -1;
+  width: 100%;
   min-height: 260px;
   border: none;
   border-radius: 0;
@@ -1271,8 +1273,16 @@ button {
 }
 
 .bench-empty-state {
-  min-height: 560px;
+  width: 100%;
+  max-width: 560px;
+  min-height: 320px;
   padding: var(--pv-space-3);
+}
+
+.test-bench-layout:has(> .bench-empty-state) {
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  align-content: center;
 }
 
 .settings-section {
@@ -1313,12 +1323,34 @@ button {
 .secret-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
 }
 
 .secret-status {
+  min-width: max-content;
+  white-space: nowrap;
   color: var(--pv-text-muted);
+}
+
+.secret-action-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+@media (max-width: 640px) {
+  .secret-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .secret-action-controls {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
 }
 
 .import-export-panel {

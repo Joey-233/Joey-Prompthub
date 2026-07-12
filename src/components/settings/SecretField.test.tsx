@@ -4,6 +4,19 @@ import { expect, it, vi } from "vitest";
 
 import { SecretField } from "./SecretField";
 
+it("groups secret actions separately from the non-wrapping status", async () => {
+  window.promptHub.secure.has = vi.fn().mockResolvedValue(false);
+  const { container } = render(
+    <SecretField label="API Key" storageKey="ai.apiKey" actionLabel="保存" />,
+  );
+
+  await waitFor(() => expect(screen.getByLabelText("API Key")).toBeEnabled());
+  expect(container.querySelector(".secret-status")).toBeTruthy();
+  expect(container.querySelector(".secret-action-controls")).toContainElement(
+    screen.getByRole("button", { name: "保存" }),
+  );
+});
+
 it("serializes save and clear operations", async () => {
   const user = userEvent.setup();
   let finishSave!: () => void;

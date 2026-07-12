@@ -16,6 +16,21 @@ function declarations(selector: string) {
 }
 
 describe('compact workspace CSS contract', () => {
+  it('lets library and test-bench empty states consume and center within their workspace', () => {
+    expect(declarations('.prompt-grid-empty')).toMatch(/grid-column:\s*1\s*\/\s*-1/)
+    expect(declarations('.prompt-grid-empty')).toMatch(/width:\s*100%/)
+    expect(declarations('.test-bench-layout:has(> .bench-empty-state)')).toMatch(/place-items:\s*center/)
+    expect(declarations('.bench-empty-state')).toMatch(/width:\s*100%/)
+    expect(declarations('.bench-empty-state')).toMatch(/max-width:\s*\d+px/)
+  })
+
+  it('keeps secret status and controls compact while retaining a narrow-screen stack', () => {
+    expect(declarations('.secret-actions')).toMatch(/justify-content:\s*flex-start/)
+    expect(declarations('.secret-status')).toMatch(/white-space:\s*nowrap/)
+    expect(declarations('.secret-action-controls')).toMatch(/margin-left:\s*auto/)
+    expect(css).toMatch(/@media\s*\(max-width:\s*\d+px\)[\s\S]*\.secret-actions[\s\S]*flex-direction:\s*column/)
+  })
+
   it('uses tokens instead of legacy 13-32px radii outside intentional image clipping', () => {
     // These are media surfaces whose slightly larger crop radius is part of the image presentation,
     // not a panel/control shape. Backdrops and circular/pill shapes do not use values in this range.
