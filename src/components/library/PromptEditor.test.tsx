@@ -31,6 +31,16 @@ const prompt: PromptRecord = {
 }
 
 describe('PromptEditor', () => {
+  it('keeps supporting fields mounted inside collapsed editor sections', () => {
+    render(<PromptEditor prompt={prompt} />)
+
+    expect(screen.getByLabelText('提示词内容')).toBeVisible()
+    expect(screen.getByLabelText('备注')).toBeInTheDocument()
+    expect(screen.getByLabelText('上传预览图文件')).toBeInTheDocument()
+    expect(document.querySelectorAll('.editor-section')).toHaveLength(3)
+    expect(document.querySelectorAll('.editor-section[open]')).toHaveLength(0)
+  })
+
   it('saves content changes after a debounce delay', async () => {
     vi.useFakeTimers()
     const updatePrompt = vi.fn().mockResolvedValue({

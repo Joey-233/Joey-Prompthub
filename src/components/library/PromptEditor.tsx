@@ -198,11 +198,11 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
         {saveStatus === 'error' && durableDraft ? <button className="editor-retry" type="button" onClick={() => void savePatch(prompt.id)}>重试</button> : null}
       </header>
       <div className="editor-fields">
-        <label className="field">
+        <label className="field editor-primary-field">
           <span className="field-label">提示词内容</span>
           <textarea
             aria-label="提示词内容"
-            className="field-textarea field-textarea-mono"
+            className="field-textarea field-textarea-mono editor-content-textarea"
             value={draft.content}
             onChange={(event) =>
               updateDraft((current) => ({ ...current, content: event.target.value }))
@@ -210,85 +210,103 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
           />
         </label>
 
-        <label className="field">
-          <span className="field-label">标签（逗号分隔）</span>
-          <input
-            className="field-input"
-            value={tagsInput}
-            onChange={(event) => {
-              const raw = event.target.value
-              setTagsInput(raw)
-              updateDraft((current) => ({
-                ...current,
-                tags: raw
-                  .split(',')
-                  .map((item) => item.trim())
-                  .filter(Boolean)
-              }))
-            }}
-          />
-        </label>
+        <details className="editor-section">
+          <summary>
+            <span>标签</span>
+            <span className="editor-section-summary">{draft.tags.length > 0 ? `${draft.tags.length} 个` : '未添加'}</span>
+          </summary>
+          <label className="field">
+            <span className="field-label">标签（逗号分隔）</span>
+            <input
+              className="field-input"
+              value={tagsInput}
+              onChange={(event) => {
+                const raw = event.target.value
+                setTagsInput(raw)
+                updateDraft((current) => ({
+                  ...current,
+                  tags: raw
+                    .split(',')
+                    .map((item) => item.trim())
+                    .filter(Boolean)
+                }))
+              }}
+            />
+          </label>
+        </details>
 
-        <label className="field">
-          <span className="field-label">备注</span>
-          <textarea
-            aria-label="备注"
-            className="field-textarea field-textarea-notes"
-            placeholder="给自己留点 context — 灵感来源、效果、调试要点..."
-            value={draft.notes}
-            onChange={(event) =>
-              updateDraft((current) => ({ ...current, notes: event.target.value }))
-            }
-          />
-        </label>
+        <details className="editor-section">
+          <summary>
+            <span>备注</span>
+            <span className="editor-section-summary">{draft.notes ? draft.notes.split('\n')[0] : '未添加'}</span>
+          </summary>
+          <label className="field">
+            <span className="field-label">备注</span>
+            <textarea
+              aria-label="备注"
+              className="field-textarea field-textarea-notes"
+              placeholder="给自己留点 context — 灵感来源、效果、调试要点..."
+              value={draft.notes}
+              onChange={(event) =>
+                updateDraft((current) => ({ ...current, notes: event.target.value }))
+              }
+            />
+          </label>
+        </details>
 
-        <div className="field">
-          <span className="field-label">
-            预览图（最多 {MAX_PREVIEW_IMAGES} 张，hover 卡片可轮播）
-          </span>
-          <div
-            className="editor-preview-grid"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleDropFiles}
-          >
-            {getImages(draft).map((src, idx) => (
-              <div className="editor-preview-slot" key={`${idx}-${src.slice(-12)}`}>
-                <img alt={`预览图 ${idx + 1}`} className="editor-preview-slot-image" src={src} />
+        <details className="editor-section">
+          <summary>
+            <span>预览图</span>
+            <span className="editor-section-summary">{getImages(draft).length > 0 ? `${getImages(draft).length} 张` : '未添加'}</span>
+          </summary>
+          <div className="field">
+            <span className="field-label">
+              预览图（最多 {MAX_PREVIEW_IMAGES} 张，hover 卡片可轮播）
+            </span>
+            <div
+              className="editor-preview-grid"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDropFiles}
+            >
+              {getImages(draft).map((src, idx) => (
+                <div className="editor-preview-slot" key={`${idx}-${src.slice(-12)}`}>
+                  <img alt={`预览图 ${idx + 1}`} className="editor-preview-slot-image" src={src} />
+                  <button
+                    aria-label="移除该预览图"
+                    className="editor-preview-slot-remove"
+                    type="button"
+                    onClick={() => replacePreviewAt(idx, null)}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              {getImages(draft).length < MAX_PREVIEW_IMAGES && (
                 <button
-                  aria-label="移除该预览图"
-                  className="editor-preview-slot-remove"
+                  className="editor-preview-slot editor-preview-slot-add"
                   type="button"
-                  onClick={() => replacePreviewAt(idx, null)}
+                  onClick={() => previewInputRef.current?.click()}
+                  title="点击上传 / Ctrl+V 粘贴 / 拖入图片"
                 >
-                  ×
+                  <span className="editor-preview-slot-add-plus">+</span>
+                  <span className="editor-preview-slot-add-hint">
+                    上传 · 粘贴 · 拖入
+                  </span>
                 </button>
-              </div>
-            ))}
-            {getImages(draft).length < MAX_PREVIEW_IMAGES && (
-              <button
-                className="editor-preview-slot editor-preview-slot-add"
-                type="button"
-                onClick={() => previewInputRef.current?.click()}
-                title="点击上传 / Ctrl+V 粘贴 / 拖入图片"
-              >
-                <span className="editor-preview-slot-add-plus">+</span>
-                <span className="editor-preview-slot-add-hint">
-                  上传 · 粘贴 · 拖入
-                </span>
-              </button>
-            )}
+              )}
+            </div>
+            <input
+              ref={previewInputRef}
+              hidden
+              multiple
+              accept="image/*"
+              aria-label="上传预览图文件"
+              type="file"
+              onChange={(event) => void handlePreviewFileChange(event)}
+            />
+            {previewError ? <p className="field-hint field-hint-error">{previewError}</p> : null}
           </div>
-          <input
-            ref={previewInputRef}
-            hidden
-            multiple
-            accept="image/*"
-            aria-label="上传预览图文件"
-            type="file"
-            onChange={(event) => void handlePreviewFileChange(event)}
-          />
-          {previewError ? <p className="field-hint field-hint-error">{previewError}</p> : null}
-        </div>
+        </details>
       </div>
 
       <div className="editor-actions">

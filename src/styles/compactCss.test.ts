@@ -32,6 +32,13 @@ function mediaBlock(query: string, source = css) {
 }
 
 describe('compact workspace CSS contract', () => {
+  it('keeps prompt detail actions fixed while its editor fields scroll', () => {
+    expect(declarations('.library-detail .editor-panel')).toMatch(/display:\s*flex/)
+    expect(declarations('.library-detail .editor-panel')).toMatch(/overflow:\s*hidden/)
+    expect(declarations('.library-detail .editor-fields')).toMatch(/overflow-y:\s*auto/)
+    expect(declarations('.library-detail .editor-actions')).toMatch(/flex:\s*none/)
+  })
+
   it('flows prompt cards into responsive masonry columns at their natural height', () => {
     expect(declarations('.prompt-grid')).toMatch(/columns:\s*2\s+300px/)
     expect(declarations('.prompt-card')).toMatch(/display:\s*inline-grid/)

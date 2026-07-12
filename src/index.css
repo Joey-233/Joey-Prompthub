@@ -617,21 +617,70 @@ button {
 .editor-save-status[data-status='error'] { color: #b84c42; }
 .editor-retry { padding: 3px 8px; border: 1px solid var(--pv-border); border-radius: 6px; background: transparent; }
 
-.detail-pane:has(> .library-detail) { padding: 0; }
-.library-detail { min-height: 100%; }
+.detail-pane:has(> .library-detail) { padding: 0; overflow: hidden; }
+.library-detail { min-height: 0; height: 100%; }
 .library-detail .editor-panel {
+  position: static;
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
   gap: 8px;
   padding: 12px;
   max-height: none;
+  overflow: hidden;
   border-radius: 10px;
 }
-.library-detail .editor-fields { gap: 8px; }
+.library-detail .editor-heading { flex: none; margin-bottom: 0; }
+.library-detail .editor-fields {
+  flex: 1;
+  min-height: 0;
+  align-content: start;
+  gap: 8px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.library-detail .editor-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  width: auto;
+  flex: none;
+  position: static;
+  padding-top: 8px;
+  border-top: 1px solid var(--pv-border);
+}
 
 .editor-fields {
   display: grid;
   gap: 14px;
   min-width: 0;
 }
+
+.editor-primary-field { gap: 6px; }
+.editor-content-textarea { height: clamp(280px, 48vh, 560px); min-height: 280px; }
+
+.editor-section {
+  border-top: 1px solid var(--pv-border);
+}
+
+.editor-section summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 0;
+  cursor: pointer;
+  color: var(--pv-text-muted);
+  font-size: 0.9rem;
+  list-style: none;
+}
+
+.editor-section summary::-webkit-details-marker { display: none; }
+.editor-section summary::before { content: '›'; color: var(--pv-text-muted); transition: transform 130ms ease; }
+.editor-section[open] summary::before { transform: rotate(90deg); }
+.editor-section summary > :first-child { margin-right: auto; color: var(--pv-text); }
+.editor-section-summary { max-width: 65%; overflow: hidden; color: var(--pv-text-muted); text-overflow: ellipsis; white-space: nowrap; }
+.editor-section > .field { padding: 0 0 10px; }
 
 .editor-actions {
   display: flex;
@@ -1583,7 +1632,6 @@ html:has(#floating-root) body {
     align-items: stretch;
   }
 
-  .editor-actions,
   .bench-param-group,
   .bench-action-group {
     flex-wrap: wrap;
