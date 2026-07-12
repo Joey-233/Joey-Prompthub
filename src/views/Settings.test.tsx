@@ -465,6 +465,48 @@ describe("Settings", () => {
     expect(settingsSet).toHaveBeenCalledWith("ai_model", "deepseek-chat");
   });
 
+  it("queues a preset as one ordered batch and lets a later edit win", async () => {
+    let finishPreset!: () => void;
+    const calls: Array<[string, unknown]> = [];
+    window.promptHub.settings.set = vi.fn().mockImplementation((key, value) => {
+      calls.push([key, value]);
+      if (key === "ai_preset") return new Promise<void>((resolve) => { finishPreset = resolve; });
+      return Promise.resolve();
+    });
+    render(<Settings />);
+    await userEvent.setup().selectOptions(screen.getAllByLabelText("服务商预设")[0], "deepseek");
+    fireEvent.change(screen.getByLabelText("默认模型"), { target: { value: "later-model" } });
+    expect(calls).toEqual([["ai_preset", "deepseek"]]);
+    await act(async () => finishPreset());
+    await waitFor(() => expect(calls).toEqual([
+      ["ai_preset", "deepseek"],
+      ["ai_base_url", "https://api.deepseek.com/v1"],
+      ["ai_model", "deepseek-chat"],
+      ["ai_model", "later-model"],
+    ]));
+  });
+
+  it("shows a batch error and retries the entire exact preset batch", async () => {
+    let fail = true;
+    const calls: Array<[string, unknown]> = [];
+    window.promptHub.settings.set = vi.fn().mockImplementation((key, value) => {
+      calls.push([key, value]);
+      if (fail && key === "ai_base_url") return Promise.reject(new Error("disk"));
+      return Promise.resolve();
+    });
+    render(<Settings />);
+    await userEvent.setup().selectOptions(screen.getAllByLabelText("服务商预设")[0], "deepseek");
+    const retry = (await screen.findAllByRole("button", { name: "保存失败，点击重试" }))[0];
+    expect(calls).toEqual([
+      ["ai_preset", "deepseek"],
+      ["ai_base_url", "https://api.deepseek.com/v1"],
+      ["ai_model", "deepseek-chat"],
+    ]);
+    fail = false;
+    await userEvent.setup().click(retry);
+    await waitFor(() => expect(calls.slice(3)).toEqual(calls.slice(0, 3)));
+  });
+
   it("switching to 自定义 keeps the existing baseURL for the user to edit", async () => {
     const user = userEvent.setup();
     const settingsSet = vi.fn().mockResolvedValue(undefined);

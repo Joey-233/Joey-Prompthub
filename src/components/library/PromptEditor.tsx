@@ -38,21 +38,20 @@ function hasDraftChanges(draft: PromptRecord, source: PromptRecord) {
 
 export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
   const updatePrompt = usePromptStore((state) => state.updatePrompt)
+  const durableDraft = usePromptStore((state) => state.drafts[prompt.id])
+  const setDurableDraft = usePromptStore((state) => state.setDraft)
+  const saveDurableDraft = usePromptStore((state) => state.saveDraft)
   const deletePrompt = usePromptStore((state) => state.deletePrompt)
   const toggleFavorite = usePromptStore((state) => state.toggleFavorite)
   const openTestBench = useAppStore((state) => state.openTestBench)
-  const [draft, setDraft] = useState(prompt)
+  const initialDraft = durableDraft?.prompt ?? prompt
+  const [draft, setDraft] = useState(initialDraft)
   const [showOptimizeDialog, setShowOptimizeDialog] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [previewError, setPreviewError] = useState('')
-  const [saveStatus, setSaveStatus] = useState<'saving' | 'saved' | 'error'>('saved')
+  const saveStatus = durableDraft?.status ?? 'saved'
   const previewInputRef = useRef<HTMLInputElement | null>(null)
-  const activePromptIdRef = useRef(prompt.id)
-  activePromptIdRef.current = prompt.id
-  const revisionRef = useRef(0)
   const dirtyRef = useRef(false)
-  const mountedRef = useRef(true)
-  const latestPatchRef = useRef<{ patch: ReturnType<typeof buildDraftPatch>; revision: number } | null>(null)
   const sourcePromptRef = useRef(prompt)
 
   // Tags are stored as string[] in the data model, but the editor input is a
@@ -61,31 +60,23 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
   // filter(Boolean) before they get to type the next tag — same applies to
   // partial Chinese IME composition: rebuilding the value from the parsed
   // array on every keystroke would otherwise interrupt the IME.
-  const [tagsInput, setTagsInput] = useState(() => prompt.tags.join(', '))
+  const [tagsInput, setTagsInput] = useState(() => initialDraft.tags.join(', '))
 
   const pendingDraftRef = useRef(draft)
   pendingDraftRef.current = draft
-  const updatePromptRef = useRef(updatePrompt)
-  updatePromptRef.current = updatePrompt
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => { mountedRef.current = false }
-  }, [])
-
   function updateDraft(action: SetStateAction<PromptRecord>) {
-    revisionRef.current += 1
     dirtyRef.current = true
-    setSaveStatus('saving')
-    latestPatchRef.current = null
-    setDraft(action)
+    const next = typeof action === 'function' ? action(pendingDraftRef.current) : action
+    pendingDraftRef.current = next
+    setDraft(next)
+    setDurableDraft(next)
   }
 
   useEffect(() => {
     return () => {
       const d = pendingDraftRef.current
       if (hasDraftChanges(d, prompt)) {
-        void updatePromptRef.current(d.id, buildDraftPatch(d)).catch(() => undefined)
+        void usePromptStore.getState().saveDraft(d.id).catch(() => undefined)
       }
     }
   }, [prompt.id])
@@ -96,29 +87,19 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
     const incomingMatchesDraft = !hasDraftChanges(currentDraft, prompt)
     sourcePromptRef.current = prompt
     if (!switchedPrompt && dirtyRef.current && !incomingMatchesDraft) return
-    setDraft(prompt)
-    setTagsInput(prompt.tags.join(', '))
+    const restored = usePromptStore.getState().drafts[prompt.id]?.prompt ?? prompt
+    setDraft(restored)
+    pendingDraftRef.current = restored
+    setTagsInput(restored.tags.join(', '))
     dirtyRef.current = false
     if (switchedPrompt) {
-      revisionRef.current = 0
       setConfirmDelete(false)
       setPreviewError('')
-      setSaveStatus('saved')
-      latestPatchRef.current = null
     }
   }, [prompt])
 
-  function savePatch(id: string, patch: ReturnType<typeof buildDraftPatch>, revision = revisionRef.current) {
-    latestPatchRef.current = { patch, revision }
-    if (activePromptIdRef.current === id) setSaveStatus('saving')
-    return updatePromptRef.current(id, patch).then(
-      () => {
-        if (mountedRef.current && activePromptIdRef.current === id && revisionRef.current === revision && latestPatchRef.current?.revision === revision) setSaveStatus('saved')
-      },
-      () => {
-        if (mountedRef.current && activePromptIdRef.current === id && revisionRef.current === revision && latestPatchRef.current?.revision === revision) setSaveStatus('error')
-      }
-    )
+  function savePatch(id: string) {
+    return saveDurableDraft(id).catch(() => undefined)
   }
 
   // Ctrl+V 粘贴图片：从剪贴板抓 image/* 项加入预览
@@ -200,7 +181,7 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
   useDebouncedEffect(
     () => {
       if (hasDraftChanges(draft, prompt)) {
-        void savePatch(draft.id, buildDraftPatch(draft))
+        void savePatch(draft.id)
       }
     },
     800,
@@ -214,7 +195,7 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
         <span className="editor-save-status" role="status" data-status={saveStatus}>
           {saveStatus === 'saving' ? '保存中…' : saveStatus === 'error' ? '保存失败' : '已保存'}
         </span>
-        {saveStatus === 'error' && latestPatchRef.current ? <button className="editor-retry" type="button" onClick={() => { const latest = latestPatchRef.current!; void savePatch(prompt.id, latest.patch, latest.revision) }}>重试</button> : null}
+        {saveStatus === 'error' && durableDraft ? <button className="editor-retry" type="button" onClick={() => void savePatch(prompt.id)}>重试</button> : null}
       </header>
       <div className="editor-fields">
         <label className="field">

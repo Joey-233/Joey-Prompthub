@@ -17,6 +17,7 @@ interface PromptState {
   sortMode: LibrarySortMode
   search: string
   selectedPromptId: string | null
+  drafts: Record<string, PromptDraft>
   loadPrompts: () => Promise<void>
   createPrompt: (input: CreatePromptInput) => Promise<void>
   updatePrompt: (id: string, patch: UpdatePromptInput) => Promise<void>
@@ -26,6 +27,15 @@ interface PromptState {
   setSortMode: (sortMode: LibrarySortMode) => void
   setSearch: (search: string) => void
   selectPrompt: (id: string | null) => void
+  setDraft: (prompt: PromptRecord) => void
+  saveDraft: (id: string) => Promise<void>
+}
+
+export interface PromptDraft {
+  prompt: PromptRecord
+  patch: UpdatePromptInput
+  revision: number
+  status: 'saving' | 'error'
 }
 
 function isPromptRecord(value: unknown): value is PromptRecord {
@@ -77,6 +87,7 @@ export const usePromptStore = create<PromptState>((set, get) => {
   sortMode: 'default',
   search: '',
   selectedPromptId: null,
+  drafts: {},
   async loadPrompts() {
     const sequence = ++loadSequence
     const loadEpoch = mutationEpoch
@@ -137,6 +148,49 @@ export const usePromptStore = create<PromptState>((set, get) => {
   },
   selectPrompt(id) {
     set({ selectedPromptId: id })
+  },
+  setDraft(prompt) {
+    set((current) => {
+      const previous = current.drafts[prompt.id]
+      return {
+        drafts: {
+          ...current.drafts,
+          [prompt.id]: {
+            prompt,
+            patch: {
+              content: prompt.content,
+              notes: prompt.notes,
+              tags: prompt.tags,
+              params: prompt.params,
+              previewImages: prompt.previewImages?.length ? prompt.previewImages : prompt.previewImage ? [prompt.previewImage] : []
+            },
+            revision: (previous?.revision ?? 0) + 1,
+            status: 'saving'
+          }
+        }
+      }
+    })
+  },
+  async saveDraft(id) {
+    const snapshot = get().drafts[id]
+    if (!snapshot) return
+    set((current) => current.drafts[id]?.revision === snapshot.revision ? {
+      drafts: { ...current.drafts, [id]: { ...snapshot, status: 'saving' } }
+    } : {})
+    try {
+      await mutatePrompt(id, snapshot.patch)
+      set((current) => {
+        if (current.drafts[id]?.revision !== snapshot.revision) return {}
+        const drafts = { ...current.drafts }
+        delete drafts[id]
+        return { drafts }
+      })
+    } catch (error) {
+      set((current) => current.drafts[id]?.revision === snapshot.revision ? {
+        drafts: { ...current.drafts, [id]: { ...snapshot, status: 'error' } }
+      } : {})
+      throw error
+    }
   }
   })
 })

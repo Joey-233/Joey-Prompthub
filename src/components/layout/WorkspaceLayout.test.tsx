@@ -17,7 +17,7 @@ function mockViewport(initialWidth: number) {
       const callbacks = listeners.get(query) ?? new Set<() => void>()
       listeners.set(query, callbacks)
       return {
-        get matches() { return query.includes('1320') ? width >= 1320 : width >= 1024 },
+        get matches() { return query.includes('1320') ? width >= 1320 : width >= 1025 },
         media: query,
         addEventListener: (event: string, listener: () => void) => { if (event === 'change') callbacks.add(listener) },
         removeEventListener
@@ -97,6 +97,19 @@ describe('WorkspaceLayout', () => {
     await user.click(screen.getByRole('button', { name: '打开详情面板' }))
     expect(screen.getByRole('dialog', { name: '详情' })).toBeVisible()
     expect(screen.queryByRole('dialog', { name: '资源' })).not.toBeInTheDocument()
+  })
+
+  it('treats exactly 1024px as single-main mobile and 1025px as tablet', () => {
+    const viewport = mockViewport(1024)
+    render(layout())
+    expect(screen.queryByText('资源内容')).not.toBeInTheDocument()
+    expect(screen.queryByText('详情内容')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '打开资源面板' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '打开详情面板' })).toBeInTheDocument()
+    act(() => viewport.setWidth(1025))
+    expect(screen.getByText('资源内容')).toBeVisible()
+    expect(screen.queryByText('详情内容')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '打开详情面板' })).toBeInTheDocument()
   })
 
   it('closes a drawer with Escape and restores focus to its trigger', async () => {

@@ -118,7 +118,8 @@ beforeEach(() => {
     filterTag: null,
     sortMode: 'default',
     search: '',
-    selectedPromptId: null
+    selectedPromptId: null,
+    drafts: {}
   })
   useTestBenchStore.setState({
     prompts: [],

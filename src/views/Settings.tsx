@@ -20,6 +20,7 @@ type SettingsMap = Record<string, unknown>;
 type SaveState = {
   state: "idle" | "saving" | "saved" | "error";
   value?: unknown;
+  batch?: Array<[string, unknown]>;
 };
 
 const defaults: SettingsMap = {
@@ -60,7 +61,13 @@ export function Settings() {
   } | null>(null);
   const edited = useRef(new Set<string>());
   const versions = useRef<Record<string, number>>({});
-  const queues = useRef<Record<string, Promise<void>>>({});
+  const operationQueue = useRef<Promise<void>>(Promise.resolve());
+
+  function enqueue(operation: () => Promise<void>) {
+    const write = operationQueue.current.catch(() => undefined).then(operation);
+    operationQueue.current = write;
+    return write;
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -110,10 +117,7 @@ export function Settings() {
       ...current,
       [key]: { state: "saving", value },
     }));
-    const write = (queues.current[key] ?? Promise.resolve())
-      .catch(() => undefined)
-      .then(() => window.promptHub.settings.set(key, value));
-    queues.current[key] = write;
+    const write = enqueue(() => window.promptHub.settings.set(key, value));
     try {
       await write;
       if (versions.current[key] === version)
@@ -140,9 +144,7 @@ export function Settings() {
       ...current,
       [key]: { state: "saving", value },
     }));
-    const write = (queues.current[key] ?? Promise.resolve())
-      .catch(() => undefined)
-      .then(async () => {
+    const write = enqueue(async () => {
         const results = await Promise.allSettled([
           window.promptHub.settings.set(key, value),
           window.promptHub.system.setLaunchAtLogin(value),
@@ -157,7 +159,6 @@ export function Settings() {
             "Failed to persist launch-at-login setting",
           );
       });
-    queues.current[key] = write;
     try {
       await write;
       if (versions.current[key] === version)
@@ -174,9 +175,42 @@ export function Settings() {
     }
   }
 
-  function setMany(values: SettingsMap) {
+  async function persistMany(values: SettingsMap) {
+    const batch = Object.entries(values);
     setSettings((current) => ({ ...current, ...values }));
-    for (const [key, value] of Object.entries(values)) void persist(key, value);
+    const batchVersions: Record<string, number> = {};
+    for (const [key, value] of batch) {
+      edited.current.add(key);
+      batchVersions[key] = (versions.current[key] ?? 0) + 1;
+      versions.current[key] = batchVersions[key];
+      setStatuses((current) => ({ ...current, [key]: { state: "saving", value, batch } }));
+    }
+    const write = enqueue(async () => {
+      const failures: unknown[] = [];
+      for (const [key, value] of batch) {
+        try { await window.promptHub.settings.set(key, value); }
+        catch (error) { failures.push(error); }
+      }
+      if (failures.length) throw new AggregateError(failures, "Failed settings batch");
+    });
+    try {
+      await write;
+      setStatuses((current) => {
+        const next = { ...current };
+        for (const [key, value] of batch) if (versions.current[key] === batchVersions[key]) next[key] = { state: "saved", value };
+        return next;
+      });
+    } catch {
+      setStatuses((current) => {
+        const next = { ...current };
+        for (const [key, value] of batch) if (versions.current[key] === batchVersions[key]) next[key] = { state: "error", value, batch };
+        return next;
+      });
+    }
+  }
+
+  function setMany(values: SettingsMap) {
+    void persistMany(values);
   }
 
   function handleAiPreset(id: string) {
@@ -275,7 +309,9 @@ export function Settings() {
   ]);
   const retryFailed = () =>
     failed &&
-    void (failed[0] === "launch_at_login"
+    void (failed[1].batch
+      ? persistMany(Object.fromEntries(failed[1].batch))
+      : failed[0] === "launch_at_login"
       ? persistLaunchAtLogin(Boolean(failed[1].value))
       : persist(failed[0], failed[1].value));
   const statusNode = failed ? (

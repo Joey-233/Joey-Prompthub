@@ -127,6 +127,47 @@ describe('PromptEditor', () => {
     expect(screen.getByRole('status')).toHaveTextContent('已保存')
   })
 
+  it('restores an unmounted failed draft and retries its exact latest patch', async () => {
+    let rejectCleanup!: (reason: Error) => void
+    const updatePrompt = vi.fn()
+      .mockImplementationOnce(() => new Promise((_, reject) => { rejectCleanup = reject }))
+      .mockResolvedValue(prompt)
+    window.promptHub.prompts.update = updatePrompt
+    const first = render(<PromptEditor prompt={prompt} />)
+    fireEvent.change(screen.getByRole('textbox', { name: /提示词内容/ }), { target: { value: 'durable latest' } })
+    first.unmount()
+    await act(async () => rejectCleanup(new Error('offline')))
+
+    render(<PromptEditor prompt={prompt} />)
+    expect(screen.getByRole('textbox', { name: /提示词内容/ })).toHaveValue('durable latest')
+    expect(screen.getByRole('status')).toHaveTextContent('保存失败')
+    fireEvent.click(screen.getByRole('button', { name: '重试' }))
+    await waitFor(() => expect(updatePrompt).toHaveBeenLastCalledWith(
+      prompt.id,
+      expect.objectContaining({ content: 'durable latest' })
+    ))
+  })
+
+  it('clears only the successfully saved revision and isolates drafts by prompt', async () => {
+    let resolveOld!: (value: PromptRecord) => void
+    window.promptHub.prompts.update = vi.fn()
+      .mockImplementationOnce(() => new Promise<PromptRecord>((resolve) => { resolveOld = resolve }))
+      .mockResolvedValue(prompt)
+    const first = render(<PromptEditor prompt={prompt} />)
+    fireEvent.change(screen.getByRole('textbox', { name: /提示词内容/ }), { target: { value: 'revision one' } })
+    first.unmount()
+    const secondPrompt = { ...prompt, id: 'image-2', content: 'other source' }
+    const other = render(<PromptEditor prompt={secondPrompt} />)
+    expect(screen.getByRole('textbox', { name: /提示词内容/ })).toHaveValue('other source')
+    other.unmount()
+    const remount = render(<PromptEditor prompt={prompt} />)
+    fireEvent.change(screen.getByRole('textbox', { name: /提示词内容/ }), { target: { value: 'revision two' } })
+    await act(async () => resolveOld({ ...prompt, content: 'revision one' }))
+    remount.unmount()
+    render(<PromptEditor prompt={prompt} />)
+    expect(screen.getByRole('textbox', { name: /提示词内容/ })).toHaveValue('revision two')
+  })
+
   it('does not let a stale prompt request update the new prompt status', async () => {
     vi.useFakeTimers()
     let rejectOld!: (reason: Error) => void
