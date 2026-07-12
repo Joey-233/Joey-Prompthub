@@ -263,6 +263,49 @@ describe("Settings", () => {
     expect(systemValues).toEqual([true, false]);
   });
 
+  it.each(["settings", "system"] as const)(
+    "waits for both launch targets when %s rejects before advancing the queue",
+    async (rejectingTarget) => {
+      const user = userEvent.setup();
+      let settlePending!: () => void;
+      const settingsValues: boolean[] = [];
+      const systemValues: boolean[] = [];
+      window.promptHub.settings.set = vi
+        .fn()
+        .mockImplementation((_key, value) => {
+          settingsValues.push(Boolean(value));
+          if (!value) return Promise.resolve();
+          if (rejectingTarget === "settings")
+            return Promise.reject(new Error("db"));
+          return new Promise<void>((resolve) => {
+            settlePending = resolve;
+          });
+        });
+      window.promptHub.system.setLaunchAtLogin = vi
+        .fn()
+        .mockImplementation((value) => {
+          systemValues.push(value);
+          if (!value) return Promise.resolve();
+          if (rejectingTarget === "system")
+            return Promise.reject(new Error("os"));
+          return new Promise<void>((resolve) => {
+            settlePending = resolve;
+          });
+        });
+      render(<Settings />);
+      await user.click(screen.getByRole("button", { name: "数据与应用" }));
+      const toggle = screen.getByLabelText("开机自启");
+      await user.click(toggle);
+      await user.click(toggle);
+      await act(async () => Promise.resolve());
+      expect(settingsValues).toEqual([true]);
+      expect(systemValues).toEqual([true]);
+      await act(async () => settlePending());
+      await waitFor(() => expect(settingsValues).toEqual([true, false]));
+      expect(systemValues).toEqual([true, false]);
+    },
+  );
+
   it("accepts an empty vision override when follow mode has an AI fallback model", async () => {
     const user = userEvent.setup();
     window.promptHub.secure.has = vi.fn().mockResolvedValue(true);

@@ -142,12 +142,21 @@ export function Settings() {
     }));
     const write = (queues.current[key] ?? Promise.resolve())
       .catch(() => undefined)
-      .then(() =>
-        Promise.all([
+      .then(async () => {
+        const results = await Promise.allSettled([
           window.promptHub.settings.set(key, value),
           window.promptHub.system.setLaunchAtLogin(value),
-        ]).then(() => undefined),
-      );
+        ]);
+        const failures = results.filter(
+          (result): result is PromiseRejectedResult =>
+            result.status === "rejected",
+        );
+        if (failures.length)
+          throw new AggregateError(
+            failures.map((failure) => failure.reason),
+            "Failed to persist launch-at-login setting",
+          );
+      });
     queues.current[key] = write;
     try {
       await write;
