@@ -32,6 +32,14 @@ function mediaBlock(query: string, source = css) {
 }
 
 describe('compact workspace CSS contract', () => {
+  it('flows prompt cards into responsive masonry columns at their natural height', () => {
+    expect(declarations('.prompt-grid')).toMatch(/columns:\s*2\s+300px/)
+    expect(declarations('.prompt-card')).toMatch(/display:\s*inline-grid/)
+    expect(declarations('.prompt-card')).toMatch(/break-inside:\s*avoid/)
+    expect(declarations('.prompt-card')).toMatch(/height:\s*auto/)
+    expect(declarations('.prompt-card')).toMatch(/width:\s*100%/)
+  })
+
   it('maintains a full-height flex chain from app content into workspaces', () => {
     expect(declarations('.app-content')).toMatch(/display:\s*flex/)
     expect(declarations('.app-content')).toMatch(/flex-direction:\s*column/)
@@ -44,7 +52,7 @@ describe('compact workspace CSS contract', () => {
   })
 
   it('lets library and test-bench empty states consume and center within their workspace', () => {
-    expect(declarations('.prompt-grid-empty')).toMatch(/grid-column:\s*1\s*\/\s*-1/)
+    expect(declarations('.prompt-grid:has(> .prompt-grid-empty)')).toMatch(/columns:\s*1/)
     expect(declarations('.prompt-grid-empty')).toMatch(/width:\s*100%/)
     expect(declarations('.test-bench-layout:has(> .bench-empty-state)')).toMatch(/place-items:\s*center/)
     expect(declarations('.bench-empty-state')).toMatch(/width:\s*100%/)
