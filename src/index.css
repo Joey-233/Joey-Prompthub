@@ -2049,13 +2049,19 @@ html:has(#floating-root) body {
 .s2-section-nav { position: sticky; top: 0; z-index: 2; display: flex; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border); }
 .s2-section-nav button { border: 0; border-radius: 5px; background: transparent; padding: 5px 8px; color: var(--text-muted); }
 .s2-section-nav button[aria-current] { background: var(--accent-soft); color: var(--accent); }
+.s2-add-section { margin-left: auto; color: var(--accent) !important; }
 .s2-editor-scroll { min-height: 0; flex: 1; overflow: auto; padding: 8px 10px 24px; }
 .s2-accordion { margin-bottom: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-.s2-accordion > h2 { margin: 0; }
-.s2-accordion > h2 > button { width: 100%; border: 0; background: transparent; padding: 8px 10px; text-align: left; color: inherit; font-weight: 650; }
-.s2-accordion > h2 > button::after { content: '▸'; float: right; }
-.s2-accordion > h2 > button[aria-expanded='true']::after { content: '▾'; }
-.s2-accordion > div { padding: 0 10px 10px; }
+.s2-accordion > div:last-child { padding: 0 10px 10px; }
+.s2-accordion .s2-section-header { display: flex; align-items: center; gap: 8px; padding: 6px 8px; }
+.s2-section-header h2 { min-width: 0; flex: 1; margin: 0; }
+.s2-section-header h2 > button { width: 100%; border: 0; background: transparent; padding: 4px 2px; text-align: left; color: inherit; font-weight: 650; }
+.s2-section-header h2 > button::after { content: '▸'; float: right; }
+.s2-section-header h2 > button[aria-expanded='true']::after { content: '▾'; }
+.s2-section-controls { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.s2-section-title-input { width: 120px; min-width: 0; padding: 4px 6px; border: 1px solid var(--border); border-radius: 5px; color: inherit; background: transparent; }
+.s2-section-controls button { border: 1px solid var(--border); border-radius: 5px; background: transparent; padding: 4px 6px; color: var(--text-muted); }
+.s2-section-controls button:disabled { opacity: .45; }
 .s2-preview-wrap { position: relative; display: flex; min-height: 0; height: 100%; flex-direction: column; overflow: hidden; padding: 0; }
 .s2-preview-header { position: sticky; top: 0; z-index: 2; flex: none; padding: 8px 10px; background: var(--surface); }
 .s2-preview { min-height: 0; flex: 1; overflow: auto; margin: 0; padding: 10px; }

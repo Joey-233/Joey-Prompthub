@@ -11,7 +11,7 @@ import {
   type PromptRecord,
   type Seedance2PresetInput,
   type Seedance2PresetRecord,
-  type Seedance2TemplateData,
+  type Seedance2StoredTemplateData,
   type Seedance2TemplateInput,
   type Seedance2TemplateRecord,
   type UpdatePromptInput
@@ -523,13 +523,7 @@ function mapTemplateRow(row: SqlSeedance2TemplateRow): Seedance2TemplateRecord {
   return {
     id: row.id,
     title: row.title,
-    data: deserializeJson(row.data, {
-      intro: '',
-      refGroups: [],
-      segments: [],
-      segmentsFooter: '',
-      style: ''
-    } as Seedance2TemplateData),
+    data: deserializeJson(row.data, { sections: [] } as Seedance2StoredTemplateData),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }

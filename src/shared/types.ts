@@ -148,23 +148,30 @@ export interface Seedance2Segment {
   dialog: string
 }
 
+export type Seedance2TemplateSection =
+  | { id: string; title: string; kind: 'text'; content: string }
+  | { id: string; title: string; kind: 'references'; refGroups: Seedance2RefGroup[] }
+  | { id: string; title: string; kind: 'shots'; segments: Seedance2Segment[]; footer: string }
+
 export interface Seedance2TemplateData {
-  /** 顶部一句话总述：时长 / 视角 / 色调 / 整体氛围等 */
+  sections: Seedance2TemplateSection[]
+}
+
+/** The JSON shape used by S2 templates before customizable sections. */
+export interface Seedance2LegacyTemplateData {
   intro: string
-  /** 参考分组：视角 / 场景 / 角色等任意分组 */
   refGroups: Seedance2RefGroup[]
-  /** 镜头序列 */
   segments: Seedance2Segment[]
-  /** 序列底部的备注（一般是 "全程模拟..." 那一行） */
   segmentsFooter: string
-  /** 风格段，整段自由文本（默认填《双城之战》那一段） */
   style: string
 }
+
+export type Seedance2StoredTemplateData = Seedance2TemplateData | Seedance2LegacyTemplateData
 
 export interface Seedance2TemplateRecord {
   id: string
   title: string
-  data: Seedance2TemplateData
+  data: Seedance2StoredTemplateData
   createdAt: string
   updatedAt: string
 }

@@ -32,6 +32,12 @@ function mediaBlock(query: string, source = css) {
 }
 
 describe('compact workspace CSS contract', () => {
+  it('keeps dynamic Seedance2 section controls compact', () => {
+    expect(declarations('.s2-section-controls')).toMatch(/display:\s*flex/)
+    expect(declarations('.s2-section-title-input')).toMatch(/min-width:\s*0/)
+    expect(declarations('.s2-add-section')).toMatch(/margin-left:\s*auto/)
+  })
+
   it('keeps prompt detail actions fixed while its editor fields scroll', () => {
     expect(declarations('.library-detail .editor-panel')).toMatch(/display:\s*flex/)
     expect(declarations('.library-detail .editor-panel')).toMatch(/overflow:\s*hidden/)

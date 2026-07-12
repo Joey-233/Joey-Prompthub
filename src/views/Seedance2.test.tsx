@@ -21,6 +21,34 @@ function seedApi() {
 }
 
 describe('Seedance2 workspace', () => {
+  it('adds a named custom section and deletes an empty one without confirmation', async () => {
+    seedApi(); render(<Seedance2 />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: '新增类目' }))
+    const title = screen.getByLabelText('类目标题 新类目')
+    await user.clear(title)
+    await user.type(title, '角色设定')
+    expect(screen.getByRole('button', { name: '角色设定', expanded: true })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '删除类目 角色设定' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '角色设定' })).not.toBeInTheDocument()
+  })
+
+  it('confirms before deleting a non-empty custom section', async () => {
+    seedApi(); render(<Seedance2 />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: '新增类目' }))
+    await user.type(screen.getByLabelText('新类目内容'), '角色设定内容')
+    await user.click(screen.getByRole('button', { name: '删除类目 新类目' }))
+
+    expect(screen.getByRole('dialog', { name: '删除类目' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '确认删除' }))
+    expect(screen.queryByRole('button', { name: '新类目' })).not.toBeInTheDocument()
+  })
+
   it('uses one workspace layout and accessible accordions', async () => {
     seedApi(); render(<Seedance2 />)
     expect(await screen.findByRole('complementary', { name: 'Seedance2 资源' })).toBeInTheDocument()

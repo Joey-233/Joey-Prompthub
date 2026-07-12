@@ -537,11 +537,10 @@ describe('prompt database', () => {
   it('round-trips Seedance2 templates through create, update, list, and delete', () => {
     const db = createPromptDatabase(':memory:')
     const data = {
-      intro: 'opening',
-      refGroups: [],
-      segments: [],
-      segmentsFooter: 'ending',
-      style: 'cinematic'
+      sections: [
+        { id: 'intro', title: '开篇总述', kind: 'text' as const, content: 'opening' },
+        { id: 'style', title: '风格', kind: 'text' as const, content: 'cinematic' }
+      ]
     }
 
     const created = db.seedance2.createTemplate({ title: 'Storyboard', data })
@@ -552,7 +551,7 @@ describe('prompt database', () => {
       created.id
     ])
 
-    const updatedData = { ...data, style: 'documentary' }
+    const updatedData = { sections: [data.sections[0], { ...data.sections[1], content: 'documentary' }] }
     const updated = db.seedance2.updateTemplate(created.id, {
       title: 'Updated storyboard',
       data: updatedData

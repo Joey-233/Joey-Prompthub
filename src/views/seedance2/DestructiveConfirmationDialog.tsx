@@ -1,5 +1,5 @@
 interface Props {
-  kind: '模板' | '预设'
+  kind: '模板' | '预设' | '类目'
   name: string
   pending: boolean
   error: string | null
