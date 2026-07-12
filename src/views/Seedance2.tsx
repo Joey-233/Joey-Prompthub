@@ -18,6 +18,23 @@ const api = () => window.promptHub.seedance2
 type PendingAction = { type: 'load'; template: Seedance2TemplateRecord } | { type: 'new' } | { type: 'delete' } | { type: 'navigate'; request: NavigationRequest }
 type DestructiveTarget = { type: 'template'; id: string; name: string } | { type: 'preset'; id: string; name: string } | { type: 'section'; id: string; name: string }
 type ResourceTab = 'templates' | 'presets' | 'references'
+type AddableSectionKind = 'text' | 'intro' | 'references' | 'shots' | 'style'
+
+const addableSectionLabels: Array<{ kind: AddableSectionKind; label: string }> = [
+  { kind: 'text', label: '自定义文本类目' },
+  { kind: 'intro', label: '开篇总述' },
+  { kind: 'references', label: '参考资料' },
+  { kind: 'shots', label: '镜头序列' },
+  { kind: 'style', label: '风格' }
+]
+
+function createBlankSection(kind: AddableSectionKind): Seedance2TemplateSection {
+  if (kind === 'references') return { id: 'references', title: '参考资料', kind: 'references', refGroups: [] }
+  if (kind === 'shots') return { id: 'shots', title: '镜头序列', kind: 'shots', segments: [], footer: '' }
+  if (kind === 'intro') return { id: 'intro', title: '开篇总述', kind: 'text', content: '' }
+  if (kind === 'style') return { id: 'style', title: '风格', kind: 'text', content: '' }
+  return { id: crypto.randomUUID(), title: '新类目', kind: 'text', content: '' }
+}
 
 function hasSectionContent(section: Seedance2TemplateSection) {
   if (section.kind === 'text') return Boolean(section.content.trim())
@@ -33,6 +50,7 @@ export function Seedance2() {
   const [title, setTitle] = useState('未命名模板')
   const [dirty, setDirty] = useState(false)
   const [activeSectionId, setActiveSectionId] = useState<string | null>('intro')
+  const [isAddMenuOpen, setAddMenuOpen] = useState(false)
   const [resourceTab, setResourceTab] = useState<ResourceTab>('templates')
   const [destructive, setDestructive] = useState<DestructiveTarget | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -171,8 +189,8 @@ export function Seedance2() {
     if (hasSectionContent(section)) setDestructive({ type: 'section', id: section.id, name: section.title || '未命名类目' })
     else removeSection(section.id)
   }
-  const addSection = () => {
-    const section: Seedance2TemplateSection = { id: crypto.randomUUID(), title: '新类目', kind: 'text', content: '' }
+  const addSection = (kind: AddableSectionKind) => {
+    const section = createBlankSection(kind)
     patchDraft((current) => {
       const at = Math.max(0, current.sections.findIndex((item) => item.id === activeSectionId))
       const next = [...current.sections]
@@ -180,6 +198,7 @@ export function Seedance2() {
       return { ...current, sections: next }
     })
     setActiveSectionId(section.id)
+    setAddMenuOpen(false)
   }
   const moveSection = (id: string, direction: -1 | 1) => patchDraft((current) => {
     const from = current.sections.findIndex((section) => section.id === id)
@@ -258,6 +277,7 @@ export function Seedance2() {
   }
   const referenceSection = draft.sections.find((section) => section.kind === 'references')
   const shotsSection = draft.sections.find((section) => section.kind === 'shots')
+  const defaultSectionExists = (kind: AddableSectionKind) => kind !== 'text' && draft.sections.some((section) => section.id === kind)
   const resource = <aside className="s2-resource" aria-label="Seedance2 资源">
     <div role="tablist" aria-label="Seedance2 资源类型">{tabs.map((tab) => <button key={tab.id} id={`seedance-tab-${tab.id}`} type="button" role="tab" aria-selected={resourceTab === tab.id} aria-controls={`seedance-resource-${tab.id}`} tabIndex={resourceTab === tab.id ? 0 : -1} onClick={() => setResourceTab(tab.id)} onKeyDown={(event) => tabKeyDown(event, tab.id)}>{tab.label}</button>)}</div>
     <div role="tabpanel" id={`seedance-resource-${resourceTab}`} aria-labelledby={`seedance-tab-${resourceTab}`}>
@@ -269,7 +289,7 @@ export function Seedance2() {
 
   const main = <main className="s2-main" aria-label="Seedance2 编辑器">
     <div className="s2-toolbar"><label><span className="sr-only">模板标题</span><input className="s2-input s2-title-input" value={title} onChange={(event) => { revision.current++; setTitle(event.target.value); setDirty(true) }} /></label><button className="s2-btn s2-btn-primary" disabled={saving || (!dirty && !!currentId)} onClick={() => void save()}>{saving ? '保存中…' : currentId ? '保存' : '保存为新模板'}</button>{currentId && <button className="s2-btn" disabled={saving} onClick={() => dirty ? request({ type: 'delete' }) : setDestructive({ type: 'template', id: currentId, name: title })}>删除</button>}{saveError && !pending && <span role="alert">{saveError}</span>}</div>
-    <nav className="s2-section-nav" aria-label="编辑器分区">{draft.sections.map((section) => <button key={section.id} type="button" aria-current={activeSectionId === section.id ? 'true' : undefined} onClick={() => openSection(section.id)}>{section.title || '未命名类目'}</button>)}<button type="button" className="s2-add-section" onClick={addSection}>新增类目</button></nav>
+    <nav className="s2-section-nav" aria-label="编辑器分区">{draft.sections.map((section) => <button key={section.id} type="button" aria-current={activeSectionId === section.id ? 'true' : undefined} onClick={() => openSection(section.id)}>{section.title || '未命名类目'}</button>)}<div className="s2-add-menu"><button type="button" className="s2-add-section" aria-haspopup="menu" aria-expanded={isAddMenuOpen} onClick={() => setAddMenuOpen((open) => !open)}>新增类目</button>{isAddMenuOpen && <div className="s2-add-menu-list" role="menu">{addableSectionLabels.map((option) => <button key={option.kind} type="button" role="menuitem" disabled={defaultSectionExists(option.kind)} onClick={() => addSection(option.kind)}>{option.label}</button>)}</div>}</div></nav>
     <div className="s2-editor-scroll">{draft.sections.map(renderSection)}</div>
   </main>
   const detail = <SeedancePreviewPanel preview={preview} copyStatus={copyStatus} onCopy={() => void copyPreview()} />

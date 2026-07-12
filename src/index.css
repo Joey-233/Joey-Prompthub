@@ -2049,7 +2049,12 @@ html:has(#floating-root) body {
 .s2-section-nav { position: sticky; top: 0; z-index: 2; display: flex; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border); }
 .s2-section-nav button { border: 0; border-radius: 5px; background: transparent; padding: 5px 8px; color: var(--text-muted); }
 .s2-section-nav button[aria-current] { background: var(--accent-soft); color: var(--accent); }
-.s2-add-section { margin-left: auto; color: var(--accent) !important; }
+.s2-add-menu { position: relative; margin-left: auto; }
+.s2-add-section { color: var(--accent) !important; }
+.s2-add-menu-list { position: absolute; top: calc(100% + 4px); right: 0; z-index: 4; display: grid; min-width: 150px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); box-shadow: 0 10px 26px rgb(32 29 24 / 16%); }
+.s2-add-menu-list [role='menuitem'] { border: 0; border-radius: 5px; background: transparent; padding: 6px 8px; color: var(--text); text-align: left; }
+.s2-add-menu-list [role='menuitem']:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
+.s2-add-menu-list [role='menuitem']:disabled { opacity: .45; cursor: not-allowed; }
 .s2-editor-scroll { min-height: 0; flex: 1; overflow: auto; padding: 8px 10px 24px; }
 .s2-accordion { margin-bottom: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 .s2-accordion > div:last-child { padding: 0 10px 10px; }

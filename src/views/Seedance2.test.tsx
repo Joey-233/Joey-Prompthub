@@ -21,11 +21,31 @@ function seedApi() {
 }
 
 describe('Seedance2 workspace', () => {
+  it('restores a deleted reference section as an empty specialized module', async () => {
+    seedApi(); render(<Seedance2 />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: '新增类目' }))
+    expect(screen.getByRole('menuitem', { name: '参考资料' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: '新增类目' }))
+
+    await user.click(screen.getByRole('button', { name: '删除类目 参考资料' }))
+    await user.click(screen.getByRole('button', { name: '确认删除' }))
+    expect(screen.queryByRole('button', { name: '参考资料' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '新增类目' }))
+    await user.click(screen.getByRole('menuitem', { name: '参考资料' }))
+
+    expect(screen.getByRole('button', { name: '参考资料', expanded: true })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '+ 参考分组' })).toBeInTheDocument()
+  })
+
   it('adds a named custom section and deletes an empty one without confirmation', async () => {
     seedApi(); render(<Seedance2 />)
     const user = userEvent.setup()
 
     await user.click(screen.getByRole('button', { name: '新增类目' }))
+    await user.click(screen.getByRole('menuitem', { name: '自定义文本类目' }))
     const title = screen.getByLabelText('类目标题 新类目')
     await user.clear(title)
     await user.type(title, '角色设定')
@@ -41,6 +61,7 @@ describe('Seedance2 workspace', () => {
     const user = userEvent.setup()
 
     await user.click(screen.getByRole('button', { name: '新增类目' }))
+    await user.click(screen.getByRole('menuitem', { name: '自定义文本类目' }))
     await user.type(screen.getByLabelText('新类目内容'), '角色设定内容')
     await user.click(screen.getByRole('button', { name: '删除类目 新类目' }))
 
