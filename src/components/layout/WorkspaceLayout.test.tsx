@@ -161,6 +161,35 @@ describe('WorkspaceLayout', () => {
     expect(document.body.style.userSelect).toBe('')
   })
 
+  it.each(['pointercancel', 'lostpointercapture'] as const)('cleans up resize on %s', (eventName) => {
+    render(layout())
+    const separator = screen.getByRole('separator', { name: '调整资源面板宽度' })
+    Object.assign(separator, { setPointerCapture: vi.fn(), releasePointerCapture: vi.fn(), hasPointerCapture: () => true })
+    fireEvent.pointerDown(separator, { clientX: 100, pointerId: 7 })
+    expect(separator.setPointerCapture).toHaveBeenCalledWith(7)
+    if (eventName === 'pointercancel') fireEvent.pointerCancel(window, { pointerId: 7 })
+    else fireEvent(separator, new Event('lostpointercapture'))
+    fireEvent.pointerMove(window, { clientX: 300, pointerId: 7 })
+    expect(separator).toHaveAttribute('aria-valuenow', '220')
+    expect(document.body.style.userSelect).toBe('')
+    expect(separator.releasePointerCapture).toHaveBeenCalledWith(7)
+  })
+
+  it('stops an active resize before a breakpoint removes its separator', () => {
+    const viewport = mockViewport(1400)
+    render(layout())
+    const separator = screen.getByRole('separator', { name: '调整资源面板宽度' })
+    Object.assign(separator, { setPointerCapture: vi.fn(), releasePointerCapture: vi.fn(), hasPointerCapture: () => true })
+    fireEvent.pointerDown(separator, { clientX: 100, pointerId: 8 })
+    expect(separator.setPointerCapture).toHaveBeenCalledWith(8)
+    act(() => viewport.setWidth(800))
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument()
+    expect(document.body.style.userSelect).toBe('')
+    fireEvent.pointerMove(window, { clientX: 300, pointerId: 8 })
+    expect(useAppStore.getState().layout.resourceWidth).toBe(220)
+    expect(separator.releasePointerCapture).toHaveBeenCalledWith(8)
+  })
+
   it('reacts to breakpoint changes, closes drawers, and removes media listeners', async () => {
     const viewport = mockViewport(800)
     const user = userEvent.setup()

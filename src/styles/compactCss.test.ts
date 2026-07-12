@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
+import { findLegacyRadii } from './cssContract'
+
 const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8')
 
 function declarations(selector: string) {
@@ -22,11 +24,17 @@ describe('compact workspace CSS contract', () => {
       '.recognize-preview',
       '.generation-preview-image'
     ])
-    const violations = Array.from(css.matchAll(/([^{}]+)\{[^{}]*border-radius:\s*(1[3-9]|2\d|3[0-2])px\s*;/g))
-      .map((match) => ({ selector: match[1].trim(), radius: `${match[2]}px` }))
-      .filter(({ selector }) => !intentionalImageClipping.has(selector))
+    const violations = findLegacyRadii(css, intentionalImageClipping)
 
     expect(violations).toEqual([])
+  })
+
+  it.each([
+    ['shorthand', '.panel { border-radius: 24px 8px; }', 24],
+    ['important', '.panel { border-radius: 24px !important; }', 24],
+    ['decimal', '.panel { border-radius: 13.5px; }', 13.5]
+  ])('detects %s legacy radius syntax', (_name, sample, radius) => {
+    expect(findLegacyRadii(sample)).toEqual([{ selector: '.panel', radius }])
   })
 
   it.each([

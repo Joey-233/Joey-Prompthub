@@ -89,6 +89,7 @@ export function WorkspaceLayout({ resource, resourceLabel = '资源', main, deta
   }, [drawer])
 
   useEffect(() => {
+    stopResize.current?.()
     if (!drawer) return
     pendingFocus.current = (drawer === 'resource' ? resourceTrigger : detailTrigger).current
     setDrawer(null)
@@ -101,6 +102,7 @@ export function WorkspaceLayout({ resource, resourceLabel = '资源', main, deta
     stopResize.current?.()
     const startX = event.clientX
     const pointerId = event.pointerId
+    const source = event.currentTarget
     const startWidth = pane === 'resource' ? layout.resourceWidth : layout.detailWidth
     const direction = pane === 'resource' ? 1 : -1
     const previousUserSelect = document.body.style.userSelect
@@ -110,20 +112,28 @@ export function WorkspaceLayout({ resource, resourceLabel = '资源', main, deta
       setPaneWidth(pane, startWidth + direction * (moveEvent.clientX - startX))
     }
     let finish: (finishEvent: PointerEvent) => void
+    let lostCapture: () => void
     const cleanup = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', finish)
       window.removeEventListener('pointercancel', finish)
+      source.removeEventListener('lostpointercapture', lostCapture)
       document.body.style.userSelect = previousUserSelect
       stopResize.current = null
+      try {
+        if (source.releasePointerCapture && (!source.hasPointerCapture || source.hasPointerCapture(pointerId))) source.releasePointerCapture(pointerId)
+      } catch { /* capture may already have been released by the browser */ }
     }
     finish = (finishEvent: PointerEvent) => {
       if (finishEvent.pointerId === pointerId) cleanup()
     }
+    lostCapture = cleanup
     stopResize.current = cleanup
+    try { source.setPointerCapture?.(pointerId) } catch { /* pointer capture is optional */ }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', finish)
     window.addEventListener('pointercancel', finish)
+    source.addEventListener('lostpointercapture', lostCapture)
   }
 
   const separatorKey = (pane: Pane) => (event: KeyboardEvent<HTMLDivElement>) => {
