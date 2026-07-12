@@ -8,11 +8,27 @@ import { findLegacyRadii } from './cssContract'
 
 const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8')
 
-function declarations(selector: string) {
+function declarations(selector: string, source = css) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const match = css.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`))
+  const match = source.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`))
   expect(match, `missing ${selector}`).not.toBeNull()
   return match![1]
+}
+
+function mediaBlock(query: string, source = css) {
+  const marker = `@media ${query}`
+  const start = source.indexOf(marker)
+  expect(start, `missing ${marker}`).toBeGreaterThanOrEqual(0)
+  const open = source.indexOf('{', start + marker.length)
+  let depth = 0
+  for (let index = open; index < source.length; index += 1) {
+    if (source[index] === '{') depth += 1
+    else if (source[index] === '}') {
+      depth -= 1
+      if (depth === 0) return source.slice(open + 1, index)
+    }
+  }
+  throw new Error(`unclosed ${marker}`)
 }
 
 describe('compact workspace CSS contract', () => {
@@ -38,8 +54,14 @@ describe('compact workspace CSS contract', () => {
   it('keeps secret status and controls compact while retaining a narrow-screen stack', () => {
     expect(declarations('.secret-actions')).toMatch(/justify-content:\s*flex-start/)
     expect(declarations('.secret-status')).toMatch(/white-space:\s*nowrap/)
-    expect(declarations('.secret-action-controls')).toMatch(/margin-left:\s*auto/)
-    expect(css).toMatch(/@media\s*\(max-width:\s*\d+px\)[\s\S]*\.secret-actions[\s\S]*flex-direction:\s*column/)
+    expect(declarations('.secret-controls')).toMatch(/margin-left:\s*auto/)
+    const narrow = mediaBlock('(max-width: 640px)')
+    expect(declarations('.secret-actions', narrow)).toMatch(/flex-direction:\s*column/)
+  })
+
+  it('isolates media queries instead of matching rules from a later block', () => {
+    const sample = '@media (max-width: 640px) { .other { display: block; } } @media (max-width: 980px) { .secret-actions { flex-direction: column; } }'
+    expect(mediaBlock('(max-width: 640px)', sample)).not.toContain('.secret-actions')
   })
 
   it('uses tokens instead of legacy 13-32px radii outside intentional image clipping', () => {

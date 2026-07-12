@@ -1335,7 +1335,7 @@ button {
   color: var(--pv-text-muted);
 }
 
-.secret-action-controls {
+.secret-controls {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1348,7 +1348,7 @@ button {
     align-items: stretch;
   }
 
-  .secret-action-controls {
+  .secret-controls {
     width: 100%;
     margin-left: 0;
     flex-wrap: wrap;

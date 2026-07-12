@@ -156,7 +156,7 @@ export function SecretField({
         >
           {status}
         </span>
-        <div className="secret-action-controls">
+        <div className="secret-controls">
           {configured && (
             <>
               <button

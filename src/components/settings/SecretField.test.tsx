@@ -11,10 +11,17 @@ it("groups secret actions separately from the non-wrapping status", async () => 
   );
 
   await waitFor(() => expect(screen.getByLabelText("API Key")).toBeEnabled());
-  expect(container.querySelector(".secret-status")).toBeTruthy();
-  expect(container.querySelector(".secret-action-controls")).toContainElement(
-    screen.getByRole("button", { name: "保存" }),
-  );
+  const actions = container.querySelector<HTMLElement>(".secret-actions");
+  const status = container.querySelector<HTMLElement>(".secret-status");
+  const controls = container.querySelector<HTMLElement>(".secret-controls");
+  expect(actions).not.toBeNull();
+  expect(status).not.toBeNull();
+  expect(controls).not.toBeNull();
+  expect(actions?.children).toHaveLength(2);
+  expect(actions?.children[0]).toBe(status);
+  expect(actions?.children[1]).toBe(controls);
+  expect(controls).not.toContainElement(status);
+  expect(controls).toContainElement(screen.getByRole("button", { name: "保存" }));
 });
 
 it("serializes save and clear operations", async () => {
