@@ -874,7 +874,7 @@ button {
 
 .error-banner {
   border: 1px solid rgba(180, 79, 80, 0.22);
-  border-radius: 16px;
+  border-radius: var(--pv-radius-panel);
   padding: 12px 14px;
   color: #a94647;
   background: rgba(255, 236, 236, 0.9);
@@ -996,7 +996,7 @@ button {
 .bench-param-select,
 .bench-param-input {
   border: 1px solid var(--pv-border);
-  border-radius: 14px;
+  border-radius: var(--pv-radius-control);
   padding: 10px 12px;
   color: var(--pv-text);
   background: rgba(255, 255, 255, 0.86);
@@ -1263,7 +1263,7 @@ button {
   gap: 12px;
   padding: 12px;
   border: 1px solid var(--pv-border);
-  border-radius: 16px;
+  border-radius: var(--pv-radius-panel);
 }
 
 .settings-advanced[open] summary {
@@ -1411,7 +1411,7 @@ html:has(#floating-root) body {
 
 .floating-menu-item {
   border: 1px solid var(--pv-border);
-  border-radius: 14px;
+  border-radius: var(--pv-radius-control);
   padding: 11px 12px;
   text-align: left;
   color: var(--pv-text);
@@ -1875,7 +1875,7 @@ html:has(#floating-root) body {
   gap: 8px;
   padding: 12px 14px;
   border: 1px solid var(--pv-border);
-  border-radius: 14px;
+  border-radius: var(--pv-radius-panel);
   background: rgba(255, 255, 255, 0.9);
   margin-bottom: 10px;
 }

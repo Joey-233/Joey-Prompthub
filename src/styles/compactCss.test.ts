@@ -14,6 +14,21 @@ function declarations(selector: string) {
 }
 
 describe('compact workspace CSS contract', () => {
+  it('uses tokens instead of legacy 13-32px radii outside intentional image clipping', () => {
+    // These are media surfaces whose slightly larger crop radius is part of the image presentation,
+    // not a panel/control shape. Backdrops and circular/pill shapes do not use values in this range.
+    const intentionalImageClipping = new Set([
+      '.prompt-card-preview',
+      '.recognize-preview',
+      '.generation-preview-image'
+    ])
+    const violations = Array.from(css.matchAll(/([^{}]+)\{[^{}]*border-radius:\s*(1[3-9]|2\d|3[0-2])px\s*;/g))
+      .map((match) => ({ selector: match[1].trim(), radius: `${match[2]}px` }))
+      .filter(({ selector }) => !intentionalImageClipping.has(selector))
+
+    expect(violations).toEqual([])
+  })
+
   it.each([
     '.placeholder-page',
     '.editor-panel',
