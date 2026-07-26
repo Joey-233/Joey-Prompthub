@@ -1,8 +1,4 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-
-import { ensurePromptHubBridge } from '../browser/promptHubFallback'
-import { FloatingBallApp } from './FloatingBallApp'
+import { mountFloatingBall } from './floatingBallUi'
 import '../index.css'
 
 const rootElement = document.getElementById('floating-root')
@@ -11,10 +7,9 @@ if (!rootElement) {
   throw new Error('Floating root element not found')
 }
 
-ensurePromptHubBridge()
-
-createRoot(rootElement).render(
-  <StrictMode>
-    <FloatingBallApp />
-  </StrictMode>
-)
+if (!window.promptHubFloating) {
+  rootElement.innerHTML =
+    '<main class="fatal-error" role="alert"><div class="fatal-error-panel"><h1>Joey Prompthub 浮球启动失败</h1><p>安全桥接加载失败，请重新启动应用。</p></div></main>'
+} else {
+  mountFloatingBall(rootElement, window.promptHubFloating)
+}

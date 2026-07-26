@@ -1,25 +1,17 @@
 /**
  * 所有第三方 HTTP 调用都在主进程发起，避开渲染进程的 CORS 限制。
- * 这里实现四类调用：
- *   - chat.completions 兼容（AI 优化）
- *   - chat.completions 多模态（识图反推提示词）
- *   - OpenAI 兼容图像生成
- *   - Stable Diffusion WebUI txt2img
+ * 这里实现 OpenAI Chat Completions 兼容调用：
+ *   - 文本消息用于 AI 优化
+ *   - 多模态消息用于识图反推提示词
  *
  * API Key 直接在主进程从 secretStore 读取，不跨 IPC 暴露到渲染进程。
  */
 
-import { findAiPreset, findImagePreset } from '../src/services/ai/presets'
-import type {
-  AiDescribeImageInput,
-  AiOptimizeBridgeInput
-} from '../src/shared/types'
-import type {
-  ImageGenerationInput,
-  ImageGenerationOutcome
-} from '../src/services/image/types'
+import { findAiPreset } from '../src/services/ai/presets'
+import type { AiDescribeImageInput, AiOptimizeBridgeInput } from '../src/shared/types'
 import type { PromptDatabase } from './db'
 import { secretStore } from './secretStore'
+import { fetchJson, validateServiceBaseUrl } from './httpClient'
 
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '')
@@ -37,22 +29,19 @@ interface ResolvedAiEndpoint {
  * 从 settings + secretStore 解析出文本 AI 的调用三元组。
  * 任何缺项都抛带预设名的中文错误，UI 直接展示。
  */
-function resolveAiEndpoint(
-  database: PromptDatabase,
-  modelOverride?: string
-): ResolvedAiEndpoint {
+function resolveAiEndpoint(database: PromptDatabase, modelOverride?: string): ResolvedAiEndpoint {
   const settings = database.settings.list()
-  const presetId = String(settings.ai_preset ?? 'openai')
+  const presetId = String(settings.ai_preset ?? 'doubao')
   const preset = findAiPreset(presetId)
 
-  const baseURL = trimTrailingSlash(
-    String(settings.ai_base_url ?? '').trim() || preset.baseURL
+  const baseURL = validateServiceBaseUrl(
+    trimTrailingSlash(String(settings.ai_base_url ?? '').trim() || preset.baseURL)
   )
   const model =
     modelOverride ||
     String(settings.ai_model ?? '').trim() ||
     preset.defaultModel ||
-    'gpt-4.1-mini'
+    'doubao-seed-evolving'
   const apiKey = secretStore.reveal('ai.apiKey')
 
   if (!apiKey) throw new Error(`请先在设置页填写 ${preset.label} 的 API Key`)
@@ -63,11 +52,7 @@ function resolveAiEndpoint(
 }
 
 type ChatMessageContent =
-  | string
-  | Array<
-      | { type: 'text'; text: string }
-      | { type: 'image_url'; image_url: { url: string } }
-    >
+  string | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }>
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
@@ -76,25 +61,23 @@ interface ChatMessage {
 
 async function postChatCompletions(
   endpoint: ResolvedAiEndpoint,
-  messages: ChatMessage[]
+  messages: ChatMessage[],
+  signal?: AbortSignal
 ): Promise<string> {
-  const response = await fetch(`${endpoint.baseURL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${endpoint.apiKey}`
-    },
-    body: JSON.stringify({ model: endpoint.model, messages })
-  })
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(`AI 调用失败 (${response.status}): ${text.slice(0, 240)}`)
-  }
-
-  const data = (await response.json()) as {
+  const data = await fetchJson<{
     choices?: Array<{ message?: { content?: string } }>
-  }
+  }>(
+    `${endpoint.baseURL}/chat/completions`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${endpoint.apiKey}`
+      },
+      body: JSON.stringify({ model: endpoint.model, messages })
+    },
+    { signal, serviceLabel: 'AI 服务' }
+  )
   return data.choices?.[0]?.message?.content?.trim() ?? ''
 }
 
@@ -112,20 +95,25 @@ function directionInstruction(input: AiOptimizeBridgeInput): string {
 
 export async function callAiOptimize(
   database: PromptDatabase,
-  input: AiOptimizeBridgeInput
+  input: AiOptimizeBridgeInput,
+  signal?: AbortSignal
 ): Promise<string> {
   const endpoint = resolveAiEndpoint(database, input.model)
 
-  return postChatCompletions(endpoint, [
-    {
-      role: 'system',
-      content: '你是提示词优化助手。只返回优化后的最终提示词，不要加解释，不要加标题。'
-    },
-    {
-      role: 'user',
-      content: `优化方向：${directionInstruction(input)}\n\n原始提示词：\n${input.content}`
-    }
-  ])
+  return postChatCompletions(
+    endpoint,
+    [
+      {
+        role: 'system',
+        content: '你是提示词优化助手。只返回优化后的最终提示词，不要加解释，不要加标题。'
+      },
+      {
+        role: 'user',
+        content: `优化方向：${directionInstruction(input)}\n\n原始提示词：\n${input.content}`
+      }
+    ],
+    signal
+  )
 }
 
 /* ===================== 识图（多模态） ===================== */
@@ -133,231 +121,76 @@ export async function callAiOptimize(
 const DEFAULT_VISION_INSTRUCTION =
   '仔细观察这张图片，反推出一段可用于 AI 绘图、能复现画面主体、构图、风格、光线和质感的中文提示词。只返回提示词本身，不要任何解释。'
 
-/**
- * 识图的服务解析。两档：
- * - vision_preset 缺省或 'follow'：跟随「AI 服务」的 baseURL + Key，
- *   但允许 vision_model 单独指定一个视觉模型（最常见：同一个 OpenAI Key，
- *   文本 gpt-4.1-mini、识图 gpt-4o）。
- * - 选了具体预设：独立 baseURL + vision_model；Key 优先用 vision.apiKey，
- *   留空则回退复用 ai.apiKey（中转/同厂商场景少填一次）。
- */
-function resolveVisionEndpoint(
-  database: PromptDatabase,
-  modelOverride?: string
-): ResolvedAiEndpoint {
-  const settings = database.settings.list()
-  const visionPresetId = String(settings.vision_preset ?? 'follow')
-  const visionModel = String(settings.vision_model ?? '').trim()
-
-  if (!visionPresetId || visionPresetId === 'follow') {
-    return resolveAiEndpoint(database, modelOverride || visionModel || undefined)
-  }
-
-  const preset = findAiPreset(visionPresetId)
-  const baseURL = trimTrailingSlash(
-    String(settings.vision_base_url ?? '').trim() || preset.baseURL
-  )
-  const model = modelOverride || visionModel || preset.defaultModel
-  const apiKey = secretStore.reveal('vision.apiKey') || secretStore.reveal('ai.apiKey')
-
-  if (!apiKey) {
-    throw new Error(`请先在设置页填写 ${preset.label} 的识图 API Key`)
-  }
-  if (!baseURL) throw new Error('请在设置页填写识图服务的 baseURL，或选择内置预设')
-  if (!model) throw new Error('请在设置页填写识图模型名（如 gpt-4o、qwen-vl-plus）')
-
-  return { apiKey, baseURL, model }
-}
-
 export async function callAiVision(
   database: PromptDatabase,
-  input: AiDescribeImageInput
+  input: AiDescribeImageInput,
+  signal?: AbortSignal
 ): Promise<string> {
   if (!input.imageDataUrl?.startsWith('data:image/')) {
     throw new Error('图片数据格式不正确，请重新选择图片')
   }
 
-  const endpoint = resolveVisionEndpoint(database, input.model)
+  // 设置页只保留一套 OpenAI 兼容文字 API。识图复用相同的地址、模型和密钥；
+  // 如果所选模型不支持 image_url，服务商会返回明确的模型能力错误。
+  const endpoint = resolveAiEndpoint(database, input.model)
   const instruction = input.instruction?.trim() || DEFAULT_VISION_INSTRUCTION
 
-  return postChatCompletions(endpoint, [
-    {
-      role: 'system',
-      content: '你是图像理解与提示词反推助手。'
-    },
-    {
-      role: 'user',
-      content: [
-        { type: 'text', text: instruction },
-        { type: 'image_url', image_url: { url: input.imageDataUrl } }
-      ]
-    }
-  ])
-}
-
-/* ===================== OpenAI 兼容图像生成 ===================== */
-
-const DALLE3_SIZES = [
-  { width: 1024, height: 1024 },
-  { width: 1792, height: 1024 },
-  { width: 1024, height: 1792 }
-] as const
-
-const GPT_IMAGE_SIZES = [
-  { width: 1024, height: 1024 },
-  { width: 1536, height: 1024 },
-  { width: 1024, height: 1536 }
-] as const
-
-export async function callOpenaiImage(
-  database: PromptDatabase,
-  input: ImageGenerationInput
-): Promise<ImageGenerationOutcome> {
-  const settings = database.settings.list()
-  const presetId = String(settings.image_preset ?? 'openai-image')
-  const preset = findImagePreset(presetId)
-
-  const baseURL = trimTrailingSlash(
-    String(settings.image_base_url ?? '').trim() ||
-      preset.baseURL ||
-      'https://api.openai.com/v1'
-  )
-  const model = String(settings.image_model ?? preset.defaultModel ?? 'gpt-image-1')
-  const apiKey = secretStore.reveal('ai.apiKey')
-
-  if (!apiKey) {
-    throw new Error('请先在设置页填写 OpenAI 兼容图像服务的 API Key')
-  }
-
-  const isDalle3 = model === 'dall-e-3'
-  const sizes = isDalle3 ? DALLE3_SIZES : GPT_IMAGE_SIZES
-  const matchedSize =
-    sizes.find(
-      (option) =>
-        option.width === input.params.width && option.height === input.params.height
-    ) ?? sizes[0]
-  const size = `${matchedSize.width}x${matchedSize.height}`
-  const requestedCount = Math.max(1, Math.min(input.params.count ?? 1, 4))
-  // DALL·E 3 一次只能出一张图，靠循环凑数。
-  const callCount = isDalle3 ? requestedCount : 1
-  const perCall = isDalle3 ? 1 : requestedCount
-
-  const quality = isDalle3
-    ? input.params.quality === 'high'
-      ? 'hd'
-      : 'standard'
-    : ((input.params.quality as string | undefined) ?? 'medium')
-
-  const results: ImageGenerationOutcome['results'] = []
-
-  for (let i = 0; i < callCount; i += 1) {
-    const body: Record<string, unknown> = {
-      model,
-      prompt: input.prompt,
-      size,
-      n: perCall,
-      quality
-    }
-    if (isDalle3) {
-      body.response_format = 'b64_json'
-    }
-
-    const response = await fetch(`${baseURL}/images/generations`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`
+  return postChatCompletions(
+    endpoint,
+    [
+      {
+        role: 'system',
+        content: '你是图像理解与提示词反推助手。'
       },
-      body: JSON.stringify(body)
-    })
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => '')
-      throw new Error(`图像服务调用失败 (${response.status}): ${text.slice(0, 240)}`)
-    }
-
-    const payload = (await response.json()) as {
-      data?: Array<{ b64_json?: string; url?: string }>
-    }
-
-    for (const datum of payload.data ?? []) {
-      if (datum.b64_json) {
-        results.push({
-          imageData: `data:image/png;base64,${datum.b64_json}`,
-          mimeType: 'image/png'
-        })
-        continue
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: instruction },
+          { type: 'image_url', image_url: { url: input.imageDataUrl } }
+        ]
       }
-      if (datum.url) {
-        results.push({ imageData: datum.url, mimeType: 'image/png' })
-      }
-    }
-  }
-
-  return {
-    providerId: 'openai-image',
-    status: results.length > 0 ? 'success' : 'failed',
-    effectiveParams: {
-      model,
-      baseURL,
-      size,
-      quality,
-      count: results.length
-    },
-    results
-  }
+    ],
+    signal
+  )
 }
 
-/* ===================== SD WebUI ===================== */
+export type ProviderConnectionKind = 'ai'
 
-export async function callSdWebui(
+const modelCache = new Map<string, { expiresAt: number; models: string[] }>()
+
+export async function checkProviderConnection(
   database: PromptDatabase,
-  input: ImageGenerationInput
-): Promise<ImageGenerationOutcome> {
-  const settings = database.settings.list()
-  const raw = (settings.image_base_url as string) ?? ''
-  const baseURL = trimTrailingSlash(raw.trim())
+  kind: ProviderConnectionKind,
+  signal?: AbortSignal
+) {
+  const endpoint = resolveAiEndpoint(database)
+  if (!endpoint.apiKey) throw new Error('请先填写 API Key')
 
-  if (!baseURL) {
-    throw new Error('请先在设置页填写 SD WebUI 服务地址（如 http://127.0.0.1:7860）')
+  const cached = modelCache.get(endpoint.baseURL)
+  if (cached && cached.expiresAt > Date.now()) {
+    return { message: `连接成功，发现 ${cached.models.length} 个模型`, models: cached.models }
   }
-
-  const body = {
-    prompt: input.prompt,
-    width: input.params.width,
-    height: input.params.height,
-    steps: input.params.steps ?? 28,
-    sampler_name: input.params.sampler ?? 'DPM++ 2M Karras',
-    batch_size: Math.max(1, Math.min(input.params.count ?? 1, 8))
-  }
-
-  const response = await fetch(`${baseURL}/sdapi/v1/txt2img`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  })
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(`SD WebUI 调用失败 (${response.status}): ${text.slice(0, 240)}`)
-  }
-
-  const payload = (await response.json()) as { images?: string[] }
-  const images = payload.images ?? []
-
-  return {
-    providerId: 'sd-webui',
-    status: images.length > 0 ? 'success' : 'failed',
-    effectiveParams: {
-      width: body.width,
-      height: body.height,
-      steps: body.steps,
-      sampler: body.sampler_name,
-      batchSize: body.batch_size
+  const payload = await fetchJson<{ data?: Array<{ id?: string }> }>(
+    `${endpoint.baseURL}/models`,
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${endpoint.apiKey}` }
     },
-    results: images.map((b64) => ({
-      imageData: b64.startsWith('data:') ? b64 : `data:image/png;base64,${b64}`,
-      mimeType: 'image/png'
-    }))
+    { signal, timeoutMs: 15_000, serviceLabel: '模型服务' }
+  )
+  const models = [
+    ...new Set(
+      (payload.data ?? []).map((item) => item.id).filter((id): id is string => Boolean(id))
+    )
+  ]
+    .sort()
+    .slice(0, 500)
+  modelCache.set(endpoint.baseURL, { expiresAt: Date.now() + 5 * 60_000, models })
+  return {
+    message:
+      models.length > 0
+        ? `连接成功，发现 ${models.length} 个模型`
+        : '连接成功，但服务未返回模型列表',
+    models
   }
 }

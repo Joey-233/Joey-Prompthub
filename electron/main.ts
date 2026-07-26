@@ -1,13 +1,36 @@
-import { existsSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, Tray } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  globalShortcut,
+  Menu,
+  nativeImage,
+  protocol,
+  Tray
+} from 'electron'
 
-import { createPromptDatabase } from './db'
+import { IMAGE_TAG } from '../src/shared/types'
+
+import { createPromptDatabase, migrateLegacyDatabaseFile, type PromptDatabase } from './db'
 import { createFloatingBallWindow } from './floatingBall'
 import { registerIpc } from './ipc/registerIpc'
 import { createMainWindow } from './mainWindow'
 import { buildTrayIconPng } from './trayIcon'
+
+const PRODUCT_NAME = 'Joey Prompthub'
+const COMPATIBLE_USER_DATA_DIRECTORY = 'Prompt Hub'
+const e2eUserDataDirectory =
+  process.env.NODE_ENV === 'test' ? process.env.PROMPTHUB_E2E_USER_DATA : undefined
+if (e2eUserDataDirectory) {
+  app.setPath('userData', e2eUserDataDirectory)
+} else if (app.isPackaged && process.platform === 'win32') {
+  // Windows upgrades keep the original Prompt Hub storage directory so the
+  // product rename does not strand prompts, assets, settings or encrypted keys.
+  // A first-party macOS build uses Electron's default Joey Prompthub directory.
+  app.setPath('userData', join(app.getPath('appData'), COMPATIBLE_USER_DATA_DIRECTORY))
+}
 
 // Hardware acceleration was previously disabled to work around legacy
 // transparent-window glitches on Windows. On modern Electron + Win 11 it's no
@@ -15,41 +38,18 @@ import { buildTrayIconPng } from './trayIcon'
 // the whole app feel sluggish. If transparency glitches return on a particular
 // machine, re-add `app.disableHardwareAcceleration()` here.
 
-/**
- * Prompt Hub 之前叫 PromptVault，老用户的本地数据库文件名是 promptvault.db。
- * 启动时若新名字 (prompthub.db) 不存在但老名字存在，就把整个 SQLite triplet
- * (.db / .db-shm / .db-wal) 一起搬过来，保留全部历史数据。
- */
-function migrateLegacyDbName(directory: string) {
-  const oldBase = join(directory, 'promptvault.db')
-  const newBase = join(directory, 'prompthub.db')
-  if (existsSync(newBase) || !existsSync(oldBase)) {
-    return
-  }
-  for (const suffix of ['', '-shm', '-wal']) {
-    const oldPath = oldBase + suffix
-    const newPath = newBase + suffix
-    if (existsSync(oldPath) && !existsSync(newPath)) {
-      try {
-        renameSync(oldPath, newPath)
-      } catch (error) {
-        console.warn(`[migrateLegacyDbName] 跳过 ${oldPath}:`, error)
-      }
-    }
-  }
-}
-
-const dbDirectory = app.isPackaged ? app.getPath('userData') : process.cwd()
-migrateLegacyDbName(dbDirectory)
-
-const database = createPromptDatabase(
-  app.isPackaged ? `${app.getPath('userData')}/prompthub.db` : 'prompthub.db'
-)
-
 let mainWindow: BrowserWindow | null = null
 let floatingBallWindow: ReturnType<typeof createFloatingBallWindow> | null = null
 let tray: Tray | null = null
+let database: PromptDatabase | null = null
 let isQuitting = false
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'prompthub-asset',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: false }
+  }
+])
 
 function attachMainWindowCloseBehavior() {
   mainWindow?.on('close', (event) => {
@@ -77,7 +77,20 @@ function openMainWindow() {
 
 function ensureFloatingBallWindow() {
   if (!floatingBallWindow || floatingBallWindow.window.isDestroyed()) {
-    floatingBallWindow = createFloatingBallWindow()
+    const saved = database?.settings.list()['internal.floating_position']
+    floatingBallWindow = createFloatingBallWindow({
+      initialState:
+        saved && typeof saved === 'object'
+          ? (saved as Partial<import('../src/shared/types').FloatingWindowState>)
+          : undefined,
+      onStateChange: (state) =>
+        database?.settings.set('internal.floating_position', {
+          x: state.x,
+          y: state.y,
+          side: state.side
+        }),
+      initiallyVisible: database?.settings.list().floating_enabled !== false
+    })
   }
 }
 
@@ -101,8 +114,29 @@ function quitApp() {
   app.quit()
 }
 
+function showFloatingContextMenu() {
+  const window = floatingBallWindow?.window
+  if (!window || window.isDestroyed()) return
+  buildFloatingContextMenu().popup({ window })
+}
+
 function buildFloatingContextMenu(): Menu {
   return Menu.buildFromTemplate([
+    {
+      label: '快速录入',
+      click: () => openMainWindow()
+    },
+    {
+      label: '收录剪贴板文本',
+      click: () => {
+        const text = clipboard.readText().trim()
+        if (text && database) {
+          database.prompts.create({ content: text.slice(0, 100_000), tags: [IMAGE_TAG] })
+        }
+        openMainWindow()
+      }
+    },
+    { type: 'separator' },
     {
       label: '打开主面板',
       click: () => {
@@ -117,7 +151,7 @@ function buildFloatingContextMenu(): Menu {
     },
     { type: 'separator' },
     {
-      label: '退出 Prompt Hub',
+      label: `退出 ${PRODUCT_NAME}`,
       click: () => {
         quitApp()
       }
@@ -141,7 +175,7 @@ function buildTrayContextMenu(): Menu {
     },
     { type: 'separator' },
     {
-      label: '退出 Prompt Hub',
+      label: `退出 ${PRODUCT_NAME}`,
       click: () => {
         quitApp()
       }
@@ -153,7 +187,7 @@ function createTray() {
   if (tray) return
   const icon = nativeImage.createFromBuffer(buildTrayIconPng())
   tray = new Tray(icon)
-  tray.setToolTip('Prompt Hub')
+  tray.setToolTip(PRODUCT_NAME)
   tray.setContextMenu(buildTrayContextMenu())
   tray.on('click', () => {
     openMainWindow()
@@ -163,39 +197,71 @@ function createTray() {
   })
 }
 
-app.whenReady().then(() => {
-  ensureFloatingBallWindow()
-  createTray()
-  registerIpc(database, openMainWindow, () => floatingBallWindow)
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
 
-  ipcMain.handle('system:setLaunchAtLogin', (_event, enabled: boolean) => {
-    app.setLoginItemSettings({ openAtLogin: enabled })
+if (!hasSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    openMainWindow()
   })
 
-  ipcMain.handle('system:quitApp', () => {
-    quitApp()
-  })
-
-  ipcMain.handle('system:showFloatingContextMenu', () => {
-    const window = floatingBallWindow?.window
-    if (!window || window.isDestroyed()) {
-      return
-    }
-    buildFloatingContextMenu().popup({ window })
-  })
-
-  app.on('activate', () => {
+  app.whenReady().then(() => {
+    const dbDirectory =
+      app.isPackaged || e2eUserDataDirectory ? app.getPath('userData') : process.cwd()
+    migrateLegacyDatabaseFile(dbDirectory)
+    database = createPromptDatabase(`${dbDirectory}/prompthub.db`)
+    protocol.handle('prompthub-asset', (request) => database!.assets.handleRequest(request))
     ensureFloatingBallWindow()
+    createTray()
+    registerIpc({
+      database,
+      getMainWindow: () => mainWindow,
+      getFloatingBall: () => floatingBallWindow,
+      openMainWindow,
+      setLaunchAtLogin: (enabled) => app.setLoginItemSettings({ openAtLogin: enabled }),
+      setFloatingEnabled: (enabled) => {
+        database?.settings.set('floating_enabled', enabled)
+        if (enabled) showFloatingBall()
+        else hideFloatingBall()
+      },
+      quitApp,
+      showFloatingContextMenu
+    })
+
+    globalShortcut.register('CommandOrControl+Shift+Space', () => {
+      const window = floatingBallWindow?.window
+      if (window?.isVisible()) hideFloatingBall()
+      else showFloatingBall()
+    })
+
+    if (e2eUserDataDirectory) openMainWindow()
+
+    app.on('activate', () => {
+      ensureFloatingBallWindow()
+    })
   })
-})
 
-app.on('window-all-closed', () => {})
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('render-process-gone', (_goneEvent, details) => {
+      console.error('[render-process-gone]', details.reason, details.exitCode)
+    })
+  })
 
-app.on('before-quit', () => {
-  isQuitting = true
-  database.close()
-  if (tray) {
-    tray.destroy()
-    tray = null
-  }
-})
+  app.on('child-process-gone', (_event, details) => {
+    console.error('[child-process-gone]', details.type, details.reason, details.exitCode)
+  })
+
+  app.on('window-all-closed', () => {})
+
+  app.on('before-quit', () => {
+    isQuitting = true
+    database?.close()
+    globalShortcut.unregisterAll()
+    if (protocol.isProtocolHandled('prompthub-asset')) protocol.unhandle('prompthub-asset')
+    if (tray) {
+      tray.destroy()
+      tray = null
+    }
+  })
+}

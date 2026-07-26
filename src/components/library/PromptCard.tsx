@@ -24,6 +24,7 @@ export function PromptCard({
   onToggleFavorite: () => void
 }) {
   const lastActivity = prompt.lastGeneratedAt ?? prompt.lastUsedAt ?? null
+  const displayTitle = prompt.title.trim() || '未命名提示词'
   const images = getPreviewImages(prompt)
   const [hovering, setHovering] = useState(false)
   const [idx, setIdx] = useState(0)
@@ -35,7 +36,6 @@ export function PromptCard({
         window.clearInterval(timerRef.current)
         timerRef.current = null
       }
-      setIdx(0)
       return
     }
     timerRef.current = window.setInterval(() => {
@@ -53,19 +53,13 @@ export function PromptCard({
 
   return (
     <article
-      aria-label={prompt.title}
+      aria-label={displayTitle}
       className="prompt-card"
       data-selected={selected}
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
       onMouseEnter={() => setHovering(true)}
-      onMouseLeave={() => setHovering(false)}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onSelect()
-        }
+      onMouseLeave={() => {
+        setHovering(false)
+        setIdx(0)
       }}
     >
       <button
@@ -73,49 +67,54 @@ export function PromptCard({
         className="favorite-button"
         data-active={prompt.isFavorite}
         type="button"
-        onClick={(event) => {
-          event.stopPropagation()
-          onToggleFavorite()
-        }}
+        onClick={onToggleFavorite}
       >
         {prompt.isFavorite ? '★' : '☆'}
       </button>
-      {currentImage ? (
-        <div className="prompt-card-preview-wrap">
-          <img
-            alt={`${prompt.title} 预览图`}
-            className="prompt-card-preview"
-            src={currentImage}
-          />
-          {images.length > 1 && (
-            <div className="prompt-card-preview-dots" aria-hidden>
-              {images.map((_, i) => (
-                <span key={i} className="prompt-card-preview-dot" data-active={i === idx} />
+      <button
+        aria-label={displayTitle}
+        className="prompt-card-select"
+        type="button"
+        onClick={onSelect}
+      >
+        <span className="prompt-card-title">{displayTitle}</span>
+        {currentImage ? (
+          <div className="prompt-card-preview-wrap">
+            <img
+              alt={`${displayTitle} 预览图`}
+              className="prompt-card-preview"
+              src={currentImage}
+            />
+            {images.length > 1 && (
+              <div className="prompt-card-preview-dots" aria-hidden>
+                {images.map((_, i) => (
+                  <span key={i} className="prompt-card-preview-dot" data-active={i === idx} />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+        <p className="prompt-card-content">{prompt.content}</p>
+        <div className="prompt-card-footer">
+          {prompt.tags.length > 0 && (
+            <div className="tag-row">
+              {prompt.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="tag-pill"
+                  data-type-tag={TYPE_TAGS.includes(tag as (typeof TYPE_TAGS)[number])}
+                >
+                  {tag}
+                </span>
               ))}
             </div>
           )}
-        </div>
-      ) : null}
-      <p className="prompt-card-content">{prompt.content}</p>
-      <div className="prompt-card-footer">
-        {prompt.tags.length > 0 && (
-          <div className="tag-row">
-            {prompt.tags.map((tag) => (
-              <span
-                key={tag}
-                className="tag-pill"
-                data-type-tag={TYPE_TAGS.includes(tag as (typeof TYPE_TAGS)[number])}
-              >
-                {tag}
-              </span>
-            ))}
+          <div className="prompt-card-meta">
+            {prompt.useCount > 0 && <span>使用 {prompt.useCount} 次</span>}
+            <span>{formatRelativeTime(lastActivity)}</span>
           </div>
-        )}
-        <div className="prompt-card-meta">
-          {prompt.useCount > 0 && <span>使用 {prompt.useCount} 次</span>}
-          <span>{formatRelativeTime(lastActivity)}</span>
         </div>
-      </div>
+      </button>
     </article>
   )
 }

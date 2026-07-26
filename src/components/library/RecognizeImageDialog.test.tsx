@@ -31,9 +31,7 @@ describe('RecognizeImageDialog', () => {
     await user.click(screen.getByRole('button', { name: '开始识别' }))
 
     await waitFor(() => {
-      expect(
-        screen.getByDisplayValue('neon cyberpunk street, rainy night')
-      ).toBeInTheDocument()
+      expect(screen.getByDisplayValue('neon cyberpunk street, rainy night')).toBeInTheDocument()
     })
     expect(describeImage).toHaveBeenCalledWith(
       expect.objectContaining({

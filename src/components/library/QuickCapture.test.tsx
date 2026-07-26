@@ -145,9 +145,7 @@ describe('QuickCapture tag entry', () => {
 
     await user.click(screen.getByRole('button', { name: '保存' }))
 
-    expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ tags: ['LLM'] })
-    )
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ tags: ['LLM'] }))
   })
 
   it('removes the most recent user tag with backspace on an empty input', async () => {
@@ -182,9 +180,7 @@ describe('QuickCapture tag entry', () => {
     await user.click(screen.getByRole('button', { name: '添加已有标签 风景' }))
 
     expect(screen.getByText('风景')).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: '添加已有标签 风景' })
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '添加已有标签 风景' })).not.toBeInTheDocument()
   })
 
   it('flushes a pending tag from the input when saving', async () => {
@@ -198,8 +194,6 @@ describe('QuickCapture tag entry', () => {
     await user.type(screen.getByLabelText('添加标签'), '抽象')
     await user.click(screen.getByRole('button', { name: '保存' }))
 
-    expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ tags: ['抽象'] })
-    )
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ tags: ['抽象'] }))
   })
 })

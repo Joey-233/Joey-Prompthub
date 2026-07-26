@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 
-export type AppView = 'library' | 'test-bench' | 'seedance2' | 'settings'
-export interface NavigationRequest { view: AppView; pendingTestBenchPromptId: string | null }
+export type AppView = 'library' | 'seedance2' | 'settings'
+export interface NavigationRequest {
+  view: AppView
+}
 
 export interface LayoutPreferences {
   resourceCollapsed: boolean
@@ -62,11 +64,8 @@ function persistLayout(layout: LayoutPreferences): void {
 
 interface AppState {
   currentView: AppView
-  pendingTestBenchPromptId: string | null
   layout: LayoutPreferences
   setCurrentView: (view: AppView) => void
-  openTestBench: (promptId?: string | null) => void
-  clearPendingTestBenchPromptId: () => void
   setPaneCollapsed: (pane: 'resource' | 'detail', collapsed: boolean) => void
   setPaneWidth: (pane: 'resource' | 'detail', width: number) => void
   resetLayout: () => void
@@ -77,26 +76,16 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set) => ({
   currentView: 'library',
-  pendingTestBenchPromptId: null,
   layout: readLayout(),
   navigationGuard: null,
   setNavigationGuard: (guard) => set({ navigationGuard: guard }),
-  continueNavigation: (request) => set({ currentView: request.view, pendingTestBenchPromptId: request.pendingTestBenchPromptId }),
-  setCurrentView: (view) => set((state) => {
-    if (view === state.currentView) return state
-    const request = { view, pendingTestBenchPromptId: null }
-    return state.navigationGuard?.(request) ? state : { currentView: view, pendingTestBenchPromptId: null }
-  }),
-  openTestBench: (promptId) =>
+  continueNavigation: (request) => set({ currentView: request.view }),
+  setCurrentView: (view) =>
     set((state) => {
-      const request = { view: 'test-bench' as const, pendingTestBenchPromptId: promptId ?? null }
-      if (state.currentView === request.view && state.pendingTestBenchPromptId === request.pendingTestBenchPromptId) return state
-      return state.navigationGuard?.(request) ? state : ({
-      currentView: 'test-bench',
-      pendingTestBenchPromptId: promptId ?? null
-      })
+      if (view === state.currentView) return state
+      const request = { view }
+      return state.navigationGuard?.(request) ? state : { currentView: view }
     }),
-  clearPendingTestBenchPromptId: () => set({ pendingTestBenchPromptId: null }),
   setPaneCollapsed: (pane, collapsed) =>
     set((state) => {
       const key = pane === 'resource' ? 'resourceCollapsed' : 'detailCollapsed'

@@ -8,7 +8,8 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          main: resolve(__dirname, 'electron/main.ts')
+          main: resolve(__dirname, 'electron/main.ts'),
+          dbSmoke: resolve(__dirname, 'electron/dbSmoke.ts')
         }
       }
     }
@@ -17,7 +18,8 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          preload: resolve(__dirname, 'electron/preload.ts')
+          preload: resolve(__dirname, 'electron/preload.ts'),
+          floatingPreload: resolve(__dirname, 'electron/floatingPreload.ts')
         },
         output: {
           format: 'cjs',

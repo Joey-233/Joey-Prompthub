@@ -1,4 +1,4 @@
-# 用 Claude Code 开发 Prompt Hub 指南
+# 用 Claude Code 开发 Joey Prompthub 指南
 
 ## 一、环境准备（Windows）
 
@@ -29,8 +29,9 @@ cd prompthub
 ### 3. 放入配置文件
 
 把这两个文件放到 prompthub 目录下：
+
 - `CLAUDE.md`（Claude Code 自动读取的项目说明）
-- `Prompt Hub-开发文档v3.md`（完整产品规格，供参考）
+- `Joey-Prompthub-开发文档v3.md`（Joey Prompthub 完整产品规格，供参考）
 
 ---
 

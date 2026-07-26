@@ -6,13 +6,22 @@ import type { Seedance2Segment } from '../../shared/types'
 interface Props {
   segment: Seedance2Segment
   index: number
+  onActivate: () => void
   onChange: (patch: Partial<Seedance2Segment>) => void
   onDelete: () => void
   onDuplicate: () => void
   onSaveAsPreset: () => void
 }
 
-export function SortableSegment({ segment, index, onChange, onDelete, onDuplicate, onSaveAsPreset }: Props) {
+export function SortableSegment({
+  segment,
+  index,
+  onActivate,
+  onChange,
+  onDelete,
+  onDuplicate,
+  onSaveAsPreset
+}: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: segment.id
   })
@@ -24,7 +33,7 @@ export function SortableSegment({ segment, index, onChange, onDelete, onDuplicat
   }
 
   return (
-    <div ref={setNodeRef} className="s2-segment" style={style}>
+    <div ref={setNodeRef} className="s2-segment" style={style} onFocusCapture={onActivate}>
       <div className="s2-segment-header">
         <button
           type="button"
@@ -48,9 +57,20 @@ export function SortableSegment({ segment, index, onChange, onDelete, onDuplicat
           onChange={(e) => onChange({ shotType: e.target.value })}
           placeholder="镜头类型，如 第一视角"
         />
-        <button type="button" className="s2-btn s2-btn-icon" onClick={onSaveAsPreset} title="存为片段预设">💾</button>
-        <button type="button" className="s2-btn s2-btn-icon" onClick={onDuplicate} title="复制片段">📋</button>
-        <button type="button" className="s2-btn s2-btn-icon" onClick={onDelete} title="删除片段">🗑</button>
+        <button
+          type="button"
+          className="s2-btn s2-btn-icon"
+          onClick={onSaveAsPreset}
+          title="存为片段预设"
+        >
+          💾
+        </button>
+        <button type="button" className="s2-btn s2-btn-icon" onClick={onDuplicate} title="复制片段">
+          📋
+        </button>
+        <button type="button" className="s2-btn s2-btn-icon" onClick={onDelete} title="删除片段">
+          🗑
+        </button>
       </div>
       <textarea
         className="s2-textarea"
@@ -60,6 +80,7 @@ export function SortableSegment({ segment, index, onChange, onDelete, onDuplicat
         rows={4}
       />
       <textarea
+        data-shot-dialog-id={segment.id}
         className="s2-textarea"
         value={segment.dialog}
         onChange={(e) => onChange({ dialog: e.target.value })}

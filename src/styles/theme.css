@@ -5,6 +5,7 @@
   --pv-text: #201d18;
   --pv-text-muted: #6b645a;
   --pv-accent: #5f8ecf;
+  --pv-accent-text: #315f9d;
   --pv-danger: #b42318;
   --pv-space-1: 8px;
   --pv-space-2: 12px;
@@ -21,4 +22,22 @@
   --accent: var(--pv-accent);
   --accent-soft: rgba(95, 142, 207, 0.16);
   --danger: var(--pv-danger);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --pv-bg: #17191d;
+  --pv-surface: rgba(35, 38, 44, 0.92);
+  --pv-border: rgba(214, 220, 230, 0.16);
+  --pv-text: #f0f2f5;
+  --pv-text-muted: #a7adb7;
+  --pv-accent: #79a8e8;
+  --pv-accent-text: #79a8e8;
+  --pv-danger: #ff7b72;
+  --accent-soft: rgba(121, 168, 232, 0.18);
+}
+
+:root[data-theme='dark'] .nav-rail,
+:root[data-theme='dark'] .command-bar {
+  background: rgba(24, 26, 31, 0.92);
 }

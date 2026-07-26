@@ -1,8 +1,8 @@
-# Prompt Hub Compact Workspace Redesign Implementation Plan
+# Joey Prompthub Compact Workspace Redesign Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace Prompt Hub's space-heavy shell with a compact, responsive workspace and migrate Library, TestBench, Seedance2, and Settings without changing existing business storage or provider behavior.
+**Goal:** Replace Joey Prompthub's space-heavy shell with a compact, responsive workspace and migrate Library, TestBench, Seedance2, and Settings without changing existing business storage or provider behavior.
 
 **Architecture:** Add a shared shell composed of a navigation rail, command bar, and responsive three-pane workspace. Keep business state inside the existing feature stores/components; only layout preferences live in `appStore`. Migrate one view at a time so every commit remains testable and preserves the user's current uncommitted Seedance2 and multi-image work.
 

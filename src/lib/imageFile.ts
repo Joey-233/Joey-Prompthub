@@ -22,6 +22,15 @@ export async function readImageFileAsDataUrl(
   options: ReadImageOptions = {}
 ): Promise<string> {
   const { maxDimension = 1024, mimeType = 'image/jpeg', quality = 0.85 } = options
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+    throw new Error('仅支持 PNG、JPEG 或 WebP 图片')
+  }
+  if (file.size <= 0 || file.size > 20 * 1024 * 1024) {
+    throw new Error('图片文件必须小于 20 MB')
+  }
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(mimeType)) {
+    throw new Error('输出图片格式不受支持')
+  }
 
   const rawDataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
@@ -36,6 +45,15 @@ export async function readImageFileAsDataUrl(
     img.onerror = () => reject(new Error('无法解析图片内容，请确认文件是有效图片'))
     img.src = rawDataUrl
   })
+  if (
+    image.width <= 0 ||
+    image.height <= 0 ||
+    image.width > 20_000 ||
+    image.height > 20_000 ||
+    image.width * image.height > 40_000_000
+  ) {
+    throw new Error('图片像素尺寸过大，请先缩小图片')
+  }
 
   const scale = Math.min(1, maxDimension / Math.max(image.width, image.height))
   const width = Math.max(1, Math.round(image.width * scale))
@@ -46,8 +64,7 @@ export async function readImageFileAsDataUrl(
   canvas.height = height
   const context = canvas.getContext('2d')
   if (!context) {
-    // canvas 不可用时退回原始数据（极少见，如禁用硬件加速的特殊环境）
-    return rawDataUrl
+    throw new Error('当前环境无法安全压缩图片')
   }
 
   // JPEG 没有透明通道，先铺白底避免 PNG 透明区域变黑
@@ -57,5 +74,7 @@ export async function readImageFileAsDataUrl(
   }
   context.drawImage(image, 0, 0, width, height)
 
-  return canvas.toDataURL(mimeType, quality)
+  const result = canvas.toDataURL(mimeType, Math.max(0.1, Math.min(quality, 0.95)))
+  if (result.length > 16 * 1024 * 1024) throw new Error('压缩后的图片仍然过大')
+  return result
 }

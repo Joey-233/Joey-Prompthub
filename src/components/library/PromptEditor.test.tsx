@@ -110,7 +110,9 @@ describe('PromptEditor', () => {
       finishImageRead('data:image/jpeg;base64,RESIZED')
     })
     expect(screen.getByAltText('预览图 1')).toBeInTheDocument()
-    await act(async () => { await vi.advanceTimersByTimeAsync(850) })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(850)
+    })
 
     expect(updatePrompt).toHaveBeenCalledWith(
       'image-1',
@@ -124,27 +126,43 @@ describe('PromptEditor', () => {
 
   it('shows an error and retries the latest failed patch', async () => {
     vi.useFakeTimers()
-    const updatePrompt = vi.fn()
+    const updatePrompt = vi
+      .fn()
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValueOnce(prompt)
     window.promptHub.prompts.update = updatePrompt
     render(<PromptEditor prompt={prompt} />)
     fireEvent.change(screen.getByLabelText('提示词内容'), { target: { value: 'latest patch' } })
-    await act(async () => { await vi.advanceTimersByTimeAsync(850) })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(850)
+    })
     expect(screen.getByRole('status')).toHaveTextContent('保存失败')
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '重试' })) })
-    expect(updatePrompt).toHaveBeenLastCalledWith('image-1', expect.objectContaining({ content: 'latest patch' }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '重试' }))
+    })
+    expect(updatePrompt).toHaveBeenLastCalledWith(
+      'image-1',
+      expect.objectContaining({ content: 'latest patch' })
+    )
     expect(screen.getByRole('status')).toHaveTextContent('已保存')
   })
 
   it('restores an unmounted failed draft and retries its exact latest patch', async () => {
     let rejectCleanup!: (reason: Error) => void
-    const updatePrompt = vi.fn()
-      .mockImplementationOnce(() => new Promise((_, reject) => { rejectCleanup = reject }))
+    const updatePrompt = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectCleanup = reject
+          })
+      )
       .mockResolvedValue(prompt)
     window.promptHub.prompts.update = updatePrompt
     const first = render(<PromptEditor prompt={prompt} />)
-    fireEvent.change(screen.getByRole('textbox', { name: /提示词内容/ }), { target: { value: 'durable latest' } })
+    fireEvent.change(screen.getByRole('textbox', { name: /提示词内容/ }), {
+      target: { value: 'durable latest' }
+    })
     first.unmount()
     await act(async () => rejectCleanup(new Error('offline')))
 
@@ -152,26 +170,38 @@ describe('PromptEditor', () => {
     expect(screen.getByRole('textbox', { name: /提示词内容/ })).toHaveValue('durable latest')
     expect(screen.getByRole('status')).toHaveTextContent('保存失败')
     fireEvent.click(screen.getByRole('button', { name: '重试' }))
-    await waitFor(() => expect(updatePrompt).toHaveBeenLastCalledWith(
-      prompt.id,
-      expect.objectContaining({ content: 'durable latest' })
-    ))
+    await waitFor(() =>
+      expect(updatePrompt).toHaveBeenLastCalledWith(
+        prompt.id,
+        expect.objectContaining({ content: 'durable latest' })
+      )
+    )
   })
 
   it('clears only the successfully saved revision and isolates drafts by prompt', async () => {
     let resolveOld!: (value: PromptRecord) => void
-    window.promptHub.prompts.update = vi.fn()
-      .mockImplementationOnce(() => new Promise<PromptRecord>((resolve) => { resolveOld = resolve }))
+    window.promptHub.prompts.update = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<PromptRecord>((resolve) => {
+            resolveOld = resolve
+          })
+      )
       .mockResolvedValue(prompt)
     const first = render(<PromptEditor prompt={prompt} />)
-    fireEvent.change(screen.getByRole('textbox', { name: /提示词内容/ }), { target: { value: 'revision one' } })
+    fireEvent.change(screen.getByRole('textbox', { name: /提示词内容/ }), {
+      target: { value: 'revision one' }
+    })
     first.unmount()
     const secondPrompt = { ...prompt, id: 'image-2', content: 'other source' }
     const other = render(<PromptEditor prompt={secondPrompt} />)
     expect(screen.getByRole('textbox', { name: /提示词内容/ })).toHaveValue('other source')
     other.unmount()
     const remount = render(<PromptEditor prompt={prompt} />)
-    fireEvent.change(screen.getByRole('textbox', { name: /提示词内容/ }), { target: { value: 'revision two' } })
+    fireEvent.change(screen.getByRole('textbox', { name: /提示词内容/ }), {
+      target: { value: 'revision two' }
+    })
     await act(async () => resolveOld({ ...prompt, content: 'revision one' }))
     remount.unmount()
     render(<PromptEditor prompt={prompt} />)
@@ -181,7 +211,12 @@ describe('PromptEditor', () => {
   it('does not let a stale prompt request update the new prompt status', async () => {
     vi.useFakeTimers()
     let rejectOld!: (reason: Error) => void
-    window.promptHub.prompts.update = vi.fn().mockImplementationOnce(() => new Promise((_, reject) => { rejectOld = reject }))
+    window.promptHub.prompts.update = vi.fn().mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectOld = reject
+        })
+    )
     const { rerender } = render(<PromptEditor prompt={prompt} />)
     fireEvent.change(screen.getByLabelText('提示词内容'), { target: { value: 'old edit' } })
     await vi.advanceTimersByTimeAsync(850)
@@ -194,14 +229,27 @@ describe('PromptEditor', () => {
     vi.useFakeTimers()
     let resolveA!: (value: PromptRecord) => void
     let resolveB!: (value: PromptRecord) => void
-    const updatePrompt = vi.fn()
-      .mockImplementationOnce(() => new Promise<PromptRecord>((resolve) => { resolveA = resolve }))
-      .mockImplementationOnce(() => new Promise<PromptRecord>((resolve) => { resolveB = resolve }))
+    const updatePrompt = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<PromptRecord>((resolve) => {
+            resolveA = resolve
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<PromptRecord>((resolve) => {
+            resolveB = resolve
+          })
+      )
     window.promptHub.prompts.update = updatePrompt
     const { rerender } = render(<PromptEditor prompt={prompt} />)
 
     fireEvent.change(screen.getByLabelText('提示词内容'), { target: { value: 'edit A' } })
-    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800)
+    })
     fireEvent.change(screen.getByLabelText('提示词内容'), { target: { value: 'edit B' } })
 
     await act(async () => resolveA({ ...prompt, content: 'edit A' }))
@@ -209,8 +257,13 @@ describe('PromptEditor', () => {
     expect(screen.getByLabelText('提示词内容')).toHaveValue('edit B')
     expect(screen.getByRole('status')).toHaveTextContent('保存中')
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
-    expect(updatePrompt).toHaveBeenLastCalledWith('image-1', expect.objectContaining({ content: 'edit B' }))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800)
+    })
+    expect(updatePrompt).toHaveBeenLastCalledWith(
+      'image-1',
+      expect.objectContaining({ content: 'edit B' })
+    )
     expect(screen.queryByRole('button', { name: '重试' })).not.toBeInTheDocument()
     await act(async () => resolveB({ ...prompt, content: 'edit B' }))
     expect(screen.getByRole('status')).toHaveTextContent('已保存')
@@ -220,32 +273,57 @@ describe('PromptEditor', () => {
     vi.useFakeTimers()
     let rejectA!: (reason: Error) => void
     let rejectB!: (reason: Error) => void
-    const updatePrompt = vi.fn()
-      .mockImplementationOnce(() => new Promise((_, reject) => { rejectA = reject }))
-      .mockImplementationOnce(() => new Promise((_, reject) => { rejectB = reject }))
+    const updatePrompt = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectA = reject
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectB = reject
+          })
+      )
       .mockResolvedValue(prompt)
     window.promptHub.prompts.update = updatePrompt
     render(<PromptEditor prompt={prompt} />)
     fireEvent.change(screen.getByLabelText('提示词内容'), { target: { value: 'edit A' } })
-    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800)
+    })
     fireEvent.change(screen.getByLabelText('提示词内容'), { target: { value: 'edit B' } })
-    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800)
+    })
 
     await act(async () => rejectA(new Error('stale failure')))
     expect(screen.queryByRole('button', { name: '重试' })).not.toBeInTheDocument()
     await act(async () => rejectB(new Error('latest failure')))
     fireEvent.click(screen.getByRole('button', { name: '重试' }))
-    expect(updatePrompt).toHaveBeenLastCalledWith('image-1', expect.objectContaining({ content: 'edit B' }))
+    expect(updatePrompt).toHaveBeenLastCalledWith(
+      'image-1',
+      expect.objectContaining({ content: 'edit B' })
+    )
   })
 
   it('offers retry only for the latest failed draft', async () => {
     vi.useFakeTimers()
     let rejectLatest!: (reason: Error) => void
-    const updatePrompt = vi.fn().mockImplementation(() => new Promise((_, reject) => { rejectLatest = reject }))
+    const updatePrompt = vi.fn().mockImplementation(
+      () =>
+        new Promise((_, reject) => {
+          rejectLatest = reject
+        })
+    )
     window.promptHub.prompts.update = updatePrompt
     render(<PromptEditor prompt={prompt} />)
     fireEvent.change(screen.getByLabelText('提示词内容'), { target: { value: 'retry this' } })
-    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800)
+    })
     await act(async () => rejectLatest(new Error('latest failed')))
     expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('提示词内容'), { target: { value: 'newer local edit' } })

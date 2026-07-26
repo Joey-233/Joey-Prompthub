@@ -85,9 +85,7 @@ describe('appStore layout preferences', () => {
       resourceWidth: 320,
       detailWidth: 280
     })
-    expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY)!)).toEqual(
-      store.getState().layout
-    )
+    expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY)!)).toEqual(store.getState().layout)
   })
 
   it('ignores non-finite width updates', async () => {
@@ -116,7 +114,7 @@ describe('appStore layout preferences', () => {
 
   it('resets and persists only layout without changing navigation state', async () => {
     const store = await loadStore()
-    store.getState().openTestBench('prompt-1')
+    store.getState().setCurrentView('seedance2')
     store.getState().setPaneCollapsed('detail', true)
     store.getState().setPaneWidth('detail', 450)
 
@@ -128,22 +126,19 @@ describe('appStore layout preferences', () => {
       resourceWidth: 220,
       detailWidth: 320
     })
-    expect(store.getState().currentView).toBe('test-bench')
-    expect(store.getState().pendingTestBenchPromptId).toBe('prompt-1')
-    expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY)!)).toEqual(
-      store.getState().layout
-    )
+    expect(store.getState().currentView).toBe('seedance2')
+    expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY)!)).toEqual(store.getState().layout)
   })
 
-  it('guards full navigation payload and ignores same-view requests', async () => {
+  it('guards navigation and ignores same-view requests', async () => {
     const store = await loadStore()
-    store.getState().continueNavigation({ view: 'seedance2', pendingTestBenchPromptId: null })
+    store.getState().continueNavigation({ view: 'seedance2' })
     const guard = vi.fn(() => true)
     store.getState().setNavigationGuard(guard)
     store.getState().setCurrentView('seedance2')
     expect(guard).not.toHaveBeenCalled()
-    store.getState().openTestBench('prompt-42')
-    expect(guard).toHaveBeenCalledWith({ view: 'test-bench', pendingTestBenchPromptId: 'prompt-42' })
+    store.getState().setCurrentView('library')
+    expect(guard).toHaveBeenCalledWith({ view: 'library' })
     expect(store.getState().currentView).toBe('seedance2')
   })
 })

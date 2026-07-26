@@ -6,7 +6,9 @@ import { describe, expect, it } from 'vitest'
 
 import { findLegacyRadii } from './cssContract'
 
-const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8')
+const css = ['src/index.css', 'src/styles/seedance.css']
+  .map((path) => readFileSync(resolve(process.cwd(), path), 'utf8'))
+  .join('\n')
 
 function declarations(selector: string, source = css) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -43,14 +45,18 @@ describe('compact workspace CSS contract', () => {
     expect(declarations('.library-detail .editor-panel')).toMatch(/overflow:\s*hidden/)
     expect(declarations('.library-detail .editor-fields')).toMatch(/overflow-y:\s*auto/)
     expect(declarations('.library-detail .editor-actions')).toMatch(/flex:\s*none/)
+    expect(declarations('.library-detail .editor-actions')).toMatch(
+      /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/
+    )
   })
 
-  it('flows prompt cards into responsive masonry columns at their natural height', () => {
-    expect(declarations('.prompt-grid')).toMatch(/columns:\s*2\s+300px/)
-    expect(declarations('.prompt-card')).toMatch(/display:\s*inline-grid/)
-    expect(declarations('.prompt-card')).toMatch(/break-inside:\s*avoid/)
+  it('flows prompt cards into a responsive grid and clamps long previews', () => {
+    expect(declarations('.prompt-grid')).toMatch(/display:\s*grid/)
+    expect(declarations('.prompt-grid')).toMatch(/repeat\(auto-fill/)
+    expect(declarations('.prompt-card')).toMatch(/display:\s*grid/)
     expect(declarations('.prompt-card')).toMatch(/height:\s*auto/)
     expect(declarations('.prompt-card')).toMatch(/width:\s*100%/)
+    expect(declarations('.prompt-card-content')).toMatch(/-webkit-line-clamp:\s*8/)
   })
 
   it('maintains a full-height flex chain from app content into workspaces', () => {
@@ -59,17 +65,13 @@ describe('compact workspace CSS contract', () => {
     expect(declarations('.app-content')).toMatch(/min-height:\s*0/)
     expect(declarations('.app-content')).toMatch(/overflow:\s*hidden/)
     expect(declarations('.workspace-layout')).toMatch(/flex:\s*1/)
-    expect(declarations('.test-bench-layout')).toMatch(/flex:\s*1/)
-    expect(declarations('.test-bench-layout')).toMatch(/min-height:\s*0/)
-    expect(declarations('.test-bench-layout')).toMatch(/width:\s*100%/)
   })
 
-  it('lets library and test-bench empty states consume and center within their workspace', () => {
-    expect(declarations('.prompt-grid:has(> .prompt-grid-empty)')).toMatch(/columns:\s*1/)
+  it('lets the library empty state consume its responsive workspace', () => {
+    expect(declarations('.prompt-grid:has(> .prompt-grid-empty)')).toMatch(
+      /grid-template-columns:\s*minmax\(0,\s*1fr\)/
+    )
     expect(declarations('.prompt-grid-empty')).toMatch(/width:\s*100%/)
-    expect(declarations('.test-bench-layout:has(> .bench-empty-state)')).toMatch(/place-items:\s*center/)
-    expect(declarations('.bench-empty-state')).toMatch(/width:\s*100%/)
-    expect(declarations('.bench-empty-state')).toMatch(/max-width:\s*\d+px/)
   })
 
   it('keeps secret status and controls compact while retaining a narrow-screen stack', () => {
@@ -81,18 +83,15 @@ describe('compact workspace CSS contract', () => {
   })
 
   it('isolates media queries instead of matching rules from a later block', () => {
-    const sample = '@media (max-width: 640px) { .other { display: block; } } @media (max-width: 980px) { .secret-actions { flex-direction: column; } }'
+    const sample =
+      '@media (max-width: 640px) { .other { display: block; } } @media (max-width: 980px) { .secret-actions { flex-direction: column; } }'
     expect(mediaBlock('(max-width: 640px)', sample)).not.toContain('.secret-actions')
   })
 
   it('uses tokens instead of legacy 13-32px radii outside intentional image clipping', () => {
     // These are media surfaces whose slightly larger crop radius is part of the image presentation,
     // not a panel/control shape. Backdrops and circular/pill shapes do not use values in this range.
-    const intentionalImageClipping = new Set([
-      '.prompt-card-preview',
-      '.recognize-preview',
-      '.generation-preview-image'
-    ])
+    const intentionalImageClipping = new Set(['.prompt-card-preview', '.recognize-preview'])
     const violations = findLegacyRadii(css, intentionalImageClipping)
 
     expect(violations).toEqual([])
@@ -106,29 +105,22 @@ describe('compact workspace CSS contract', () => {
     expect(findLegacyRadii(sample)).toEqual([{ selector: '.panel', radius }])
   })
 
-  it.each([
-    '.placeholder-page',
-    '.editor-panel',
-    '.dialog-panel',
-    '.bench-prompt-list',
-    '.history-panel',
-    '.generation-card',
-    '.settings-section'
-  ])('%s uses the compact panel radius token', (selector) => {
-    expect(declarations(selector)).toMatch(/border-radius:\s*var\(--pv-radius-panel\)/)
-  })
+  it.each(['.placeholder-page', '.editor-panel', '.dialog-panel', '.settings-section'])(
+    '%s uses the compact panel radius token',
+    (selector) => {
+      expect(declarations(selector)).toMatch(/border-radius:\s*var\(--pv-radius-panel\)/)
+    }
+  )
 
-  it.each([
-    '.editor-panel',
-    '.dialog-panel',
-    '.bench-prompt-list',
-    '.bench-editor-panel',
-    '.history-panel',
-    '.settings-section'
-  ])('%s keeps container padding compact', (selector) => {
-    const value = declarations(selector).match(/padding:\s*([^;]+)/)?.[1].trim()
-    expect(value, `${selector} needs padding`).toBeTruthy()
-    if (/^\d+px$/.test(value!)) expect(Number.parseInt(value!)).toBeLessThanOrEqual(16)
-    else expect(value).toMatch(/^var\(--pv-space-[23]\)$/)
-  })
+  it.each(['.editor-panel', '.dialog-panel', '.settings-section'])(
+    '%s keeps container padding compact',
+    (selector) => {
+      const value = declarations(selector)
+        .match(/padding:\s*([^;]+)/)?.[1]
+        .trim()
+      expect(value, `${selector} needs padding`).toBeTruthy()
+      if (/^\d+px$/.test(value!)) expect(Number.parseInt(value!)).toBeLessThanOrEqual(16)
+      else expect(value).toMatch(/^var\(--pv-space-[23]\)$/)
+    }
+  )
 })

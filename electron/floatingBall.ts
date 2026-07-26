@@ -6,15 +6,16 @@ import { fileURLToPath } from 'node:url'
 
 import { BrowserWindow, screen, type Rectangle } from 'electron'
 
-import type { FloatingWindowState, MoveFloatingWindowInput } from '../src/shared/types'
+import type { FloatingWindowState } from '../src/shared/types'
+import { getTrustedDevServerUrl, installWindowSecurity } from './windowSecurity'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const FLOATING_SIZE = 120 // window is larger than the visible ball (56×56) to leave room for the drop shadow
 const BALL_RADIUS = 28 // visible button is 56×56, so radius is 28
 const WINDOW_MARGIN = 0 // window itself can sit flush with the screen edge — transparent padding keeps the visible ball ~32px away
-const DRAG_TICK_MS = 8
-const HOVER_TICK_MS = 50
+const DRAG_TICK_MS = 16
+const HOVER_TICK_MS = 100
 
 const DEBUG_DRAG = process.env.PROMPTHUB_DEBUG_DRAG === '1'
 const DEBUG_LOG_PATH = join(tmpdir(), 'prompthub-floating-debug.log')
@@ -50,10 +51,14 @@ export interface FloatingDragStartInput {
 export interface FloatingBallController {
   window: BrowserWindow
   getState: () => FloatingWindowState
-  setExpanded: (expanded: boolean) => FloatingWindowState
-  moveWindow: (input: MoveFloatingWindowInput) => FloatingWindowState
   startDrag: (input: FloatingDragStartInput) => FloatingWindowState
   endDrag: (snap: boolean) => FloatingWindowState
+}
+
+export interface FloatingBallOptions {
+  initialState?: Partial<FloatingWindowState>
+  onStateChange?: (state: FloatingWindowState) => void
+  initiallyVisible?: boolean
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -86,7 +91,11 @@ function deriveSide(x: number, area: Rectangle): 'left' | 'right' {
   return x + FLOATING_SIZE / 2 < area.x + area.width / 2 ? 'left' : 'right'
 }
 
-function getInitialState(): FloatingWindowState {
+function getInitialState(saved?: Partial<FloatingWindowState>): FloatingWindowState {
+  if (Number.isFinite(saved?.x) && Number.isFinite(saved?.y)) {
+    const { x, y, area } = clampToWorkArea(Number(saved!.x), Number(saved!.y))
+    return { x, y, side: deriveSide(x, area), expanded: false }
+  }
   const area = screen.getPrimaryDisplay().workArea
   return {
     x: area.x + area.width - FLOATING_SIZE - WINDOW_MARGIN,
@@ -107,7 +116,7 @@ function keepAbove(window: BrowserWindow) {
 }
 
 function loadFloatingRenderer(window: BrowserWindow) {
-  const rendererUrl = process.env.ELECTRON_RENDERER_URL
+  const rendererUrl = getTrustedDevServerUrl()
 
   if (rendererUrl) {
     void window.loadURL(`${rendererUrl}/floating-ball.html`)
@@ -116,20 +125,22 @@ function loadFloatingRenderer(window: BrowserWindow) {
   }
 }
 
-export function createFloatingBallWindow(): FloatingBallController {
-  let state = getInitialState()
+export function createFloatingBallWindow(
+  options: FloatingBallOptions = {}
+): FloatingBallController {
+  let state = getInitialState(options.initialState)
   let dragLoop: ReturnType<typeof setInterval> | null = null
   let hoverPoll: ReturnType<typeof setInterval> | null = null
   let dragOffset: { dx: number; dy: number } | null = null
   let isDragging = false
   let isClickThrough = false
 
-  const preloadPath = join(__dirname, '../preload/preload.js')
+  const preloadPath = join(__dirname, '../preload/floatingPreload.js')
   debugLog('preloadResolved', { __dirname, preloadPath })
 
   const window = new BrowserWindow({
     ...getBounds(state),
-    title: 'PromptHubFloatingBall',
+    title: 'JoeyPrompthubFloatingBall',
     frame: false,
     transparent: true,
     hasShadow: false,
@@ -143,9 +154,15 @@ export function createFloatingBallWindow(): FloatingBallController {
     show: false,
     webPreferences: {
       preload: preloadPath,
-      backgroundThrottling: false
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      backgroundThrottling: true
     }
   })
+
+  installWindowSecurity(window, 'floating-ball.html')
 
   window.webContents.on('preload-error', (_event, preload, error) => {
     debugLog('preload-error', { preload, error: error?.message })
@@ -202,7 +219,6 @@ export function createFloatingBallWindow(): FloatingBallController {
     state = next
     if (!window.isDestroyed()) {
       window.setBounds(getBounds(state), false)
-      keepAbove(window)
     }
     return state
   }
@@ -215,10 +231,6 @@ export function createFloatingBallWindow(): FloatingBallController {
       side: side ?? deriveSide(x, area),
       expanded: false
     })
-  }
-
-  function moveWindow(input: MoveFloatingWindowInput) {
-    return setPositionRaw(input.x, input.y)
   }
 
   function startDrag(input: FloatingDragStartInput) {
@@ -263,6 +275,8 @@ export function createFloatingBallWindow(): FloatingBallController {
     debugLog('endDrag', { windowAt: { x: state.x, y: state.y } })
     clearDragLoop()
     isDragging = false
+    keepAbove(window)
+    options.onStateChange?.(state)
     // Drop in place — no edge snapping. Let hover polling decide click-through
     // again on the next tick (the cursor is still over the ball at release).
     return state
@@ -272,7 +286,7 @@ export function createFloatingBallWindow(): FloatingBallController {
   keepAbove(window)
 
   window.once('ready-to-show', () => {
-    window.showInactive()
+    if (options.initiallyVisible !== false) window.showInactive()
     keepAbove(window)
     startHoverPoll()
 
@@ -290,9 +304,19 @@ export function createFloatingBallWindow(): FloatingBallController {
   })
 
   window.on('show', () => keepAbove(window))
+  const restoreToVisibleArea = () => {
+    const next = setPositionRaw(state.x, state.y, state.side)
+    options.onStateChange?.(next)
+  }
+  screen.on('display-added', restoreToVisibleArea)
+  screen.on('display-removed', restoreToVisibleArea)
+  screen.on('display-metrics-changed', restoreToVisibleArea)
   window.on('closed', () => {
     clearDragLoop()
     stopHoverPoll()
+    screen.off('display-added', restoreToVisibleArea)
+    screen.off('display-removed', restoreToVisibleArea)
+    screen.off('display-metrics-changed', restoreToVisibleArea)
   })
 
   return {
@@ -300,10 +324,6 @@ export function createFloatingBallWindow(): FloatingBallController {
     getState() {
       return state
     },
-    setExpanded() {
-      return applyState({ ...state, expanded: false })
-    },
-    moveWindow,
     startDrag,
     endDrag
   }

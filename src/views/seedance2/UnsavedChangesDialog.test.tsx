@@ -7,7 +7,14 @@ import { UnsavedChangesDialog } from './UnsavedChangesDialog'
 describe('UnsavedChangesDialog', () => {
   it('focuses cancel and treats Escape as cancel', async () => {
     const onCancel = vi.fn()
-    render(<UnsavedChangesDialog saving={false} onSave={vi.fn()} onDiscard={vi.fn()} onCancel={onCancel} />)
+    render(
+      <UnsavedChangesDialog
+        saving={false}
+        onSave={vi.fn()}
+        onDiscard={vi.fn()}
+        onCancel={onCancel}
+      />
+    )
     expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true')
     expect(screen.getByRole('button', { name: '取消' })).toHaveFocus()
     await userEvent.keyboard('{Escape}')

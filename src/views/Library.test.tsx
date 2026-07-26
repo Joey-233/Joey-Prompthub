@@ -39,12 +39,19 @@ const prompts: PromptRecord[] = [
 
 describe('Library', () => {
   beforeEach(() => {
-    usePromptStore.setState({ filterTag: null, sortMode: 'default', search: '', selectedPromptId: null })
+    usePromptStore.setState({
+      filterTag: null,
+      sortMode: 'default',
+      search: '',
+      selectedPromptId: null
+    })
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
       value: vi.fn().mockImplementation((query: string) => ({
-        matches: query.includes('1320'), media: query,
-        addEventListener: vi.fn(), removeEventListener: vi.fn()
+        matches: query.includes('1320'),
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn()
       }))
     })
     Object.defineProperty(window, 'promptHub', {
@@ -52,13 +59,26 @@ describe('Library', () => {
       value: {
         prompts: {
           list: vi.fn().mockResolvedValue(prompts),
+          listPage: vi.fn().mockImplementation(async (filter = {}) => {
+            let items = [...prompts]
+            if (filter.tag) items = items.filter((prompt) => prompt.tags.includes(filter.tag))
+            if (filter.search?.trim()) {
+              const search = filter.search.trim().toLowerCase()
+              items = items.filter((prompt) =>
+                [prompt.title, prompt.content, ...prompt.tags].some((value) =>
+                  value.toLowerCase().includes(search)
+                )
+              )
+            }
+            if (filter.sort === 'favorites') items = items.filter((prompt) => prompt.isFavorite)
+            return { items, total: items.length, hasMore: false }
+          }),
+          get: vi
+            .fn()
+            .mockImplementation(async (id) => prompts.find((prompt) => prompt.id === id) ?? null),
           create: vi.fn(),
           update: vi.fn(),
           delete: vi.fn()
-        },
-        generations: {
-          list: vi.fn(),
-          create: vi.fn()
         },
         settings: {
           list: vi.fn(),
@@ -67,26 +87,11 @@ describe('Library', () => {
         secure: {
           has: vi.fn(),
           set: vi.fn(),
-          delete: vi.fn(),
-          reveal: vi.fn()
+          delete: vi.fn()
         },
         ai: {
           optimize: vi.fn().mockResolvedValue(''),
           describeImage: vi.fn().mockResolvedValue('')
-        },
-        image: {
-          openaiGenerate: vi.fn().mockResolvedValue({
-            providerId: 'openai-image',
-            status: 'failed',
-            effectiveParams: {},
-            results: []
-          }),
-          sdWebuiGenerate: vi.fn().mockResolvedValue({
-            providerId: 'sd-webui',
-            status: 'failed',
-            effectiveParams: {},
-            results: []
-          })
         },
         system: {
           clipboardImport: vi.fn(),
@@ -129,9 +134,10 @@ describe('Library', () => {
 
     render(<Library />)
 
-    // Cards no longer render the title row, but expose the title via aria-label.
     expect(await screen.findByRole('button', { name: '赛博朋克街景' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '代码审查助手' })).toBeInTheDocument()
+    expect(screen.getByText('赛博朋克街景', { selector: '.prompt-card-title' })).toBeVisible()
+    expect(screen.getByText('代码审查助手', { selector: '.prompt-card-title' })).toBeVisible()
 
     // The LibraryFilters tag bar exposes its chips as role="tab".
     await user.click(screen.getByRole('tab', { name: 'LLM' }))
@@ -148,7 +154,9 @@ describe('Library', () => {
     expect(screen.getByRole('main', { name: '提示词工作区' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: '提示词详情' })).toBeInTheDocument()
     expect(screen.getByLabelText('快速录入')).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: '提示词详情' }).querySelector('.library-detail')).toHaveAttribute('data-compact', 'true')
+    expect(
+      screen.getByRole('region', { name: '提示词详情' }).querySelector('.library-detail')
+    ).toHaveAttribute('data-compact', 'true')
   })
 
   it('searches, sorts, and repairs selection when the result changes', async () => {
@@ -157,12 +165,20 @@ describe('Library', () => {
     const first = await screen.findByRole('button', { name: '赛博朋克街景' })
     await user.click(first)
     await user.type(screen.getByLabelText('搜索提示词'), '代码')
-    await waitFor(() => expect(screen.queryByRole('button', { name: '赛博朋克街景' })).not.toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: '赛博朋克街景' })).not.toBeInTheDocument()
+    )
     expect(screen.getByLabelText('提示词内容')).toHaveValue('你是一位资深代码审查专家')
     await user.clear(screen.getByLabelText('搜索提示词'))
-    await waitFor(() => expect(screen.getByRole('button', { name: '赛博朋克街景' })).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '赛博朋克街景' })).toBeInTheDocument()
+    )
     await user.selectOptions(screen.getByRole('combobox', { name: '排序方式' }), 'recent-used')
-    const cards = screen.getAllByRole('button').filter((button) => ['赛博朋克街景', '代码审查助手'].includes(button.getAttribute('aria-label') ?? ''))
+    const cards = screen
+      .getAllByRole('button')
+      .filter((button) =>
+        ['赛博朋克街景', '代码审查助手'].includes(button.getAttribute('aria-label') ?? '')
+      )
     expect(cards[0]).toHaveAttribute('aria-label', '赛博朋克街景')
   })
 

@@ -6,7 +6,16 @@ out/
 dist/
 dist-electron/
 release/
+release-*/
+build/icon.icns
+coverage/
+test-results/
+playwright-report/
 *.tsbuildinfo
+
+*.db
+*.db-shm
+*.db-wal
 
 # Local SQLite database (本地用户数据, 不应进仓库)
 prompthub.db
@@ -21,6 +30,7 @@ secure-store.json
 
 # Environment variables
 .env
+.env.*
 .env.local
 .env.*.local
 
@@ -32,6 +42,11 @@ scripts/*.log
 # Editor / OS
 .vscode/
 .idea/
+.codex/
+.cursor/
+.windsurf/
+.copilot/
+.aider*
 *.swp
 .DS_Store
 Thumbs.db

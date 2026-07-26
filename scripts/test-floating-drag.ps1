@@ -1,7 +1,7 @@
 # Floating-ball OS-level drag integration test.
 #
 # Spins up `npm run dev` with PROMPTHUB_DEBUG_DRAG=1, locates the floating
-# window via Win32 FindWindow (its title is "PromptHubFloatingBall"),
+# window via Win32 FindWindow (its title is "JoeyPrompthubFloatingBall"),
 # synthesises a real mouse-down/move/up sequence using user32 mouse_event, and
 # checks whether the window's bounding rect actually moved. Then it kills the
 # dev process. Run from the repo root: `powershell -File scripts/test-floating-drag.ps1`.
@@ -76,7 +76,7 @@ function Find-FloatingWindow {
       }
     }
     # Fallback: title search (covers cases where the debug file hasn't been written yet).
-    $h = [Win32]::FindWindow($null, 'PromptHubFloatingBall')
+    $h = [Win32]::FindWindow($null, 'JoeyPrompthubFloatingBall')
     if ($h -ne [IntPtr]::Zero) {
       $r = New-Object Win32+RECT
       if ([Win32]::GetWindowRect($h, [ref]$r)) { return $h }
@@ -220,6 +220,6 @@ finally {
     try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
   }
   Get-Process electron -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-  Get-Process node     -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path -like '*Prompt Hub*' } |
+  Get-Process node     -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path -like '*Joey Prompthub*' } |
     Stop-Process -Force -ErrorAction SilentlyContinue
 }

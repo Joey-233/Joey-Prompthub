@@ -1,637 +1,1261 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
-<meta charset="utf-8" />
-<title>Prompt Hub — 桌面提示词器</title>
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;700&family=Noto+Sans+SC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-<style>
-  :root{
-    --bg: #f3efe6;
-    --bg-2: #efe9dd;
-    --paper: #fbf8f1;
-    --ink: #1a1c1f;
-    --ink-soft:#3a3d42;
-    --muted:#6b6f76;
-    --line: #e6dfd0;
-    --line-2:#dcd3bf;
-    --blue: #cad9ec;
-    --blue-deep:#2f4d7a;
-    --blue-soft:#e8eef9;
-    --green:#8fa67a;
-    --rose:#c98a86;
-    --sun:#d9b25c;
-    --lilac:#9d8bb2;
-  }
-  *{box-sizing:border-box}
-  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans SC","Helvetica Neue",Helvetica,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-  body{
-    cursor:none;
-    overflow-x:hidden;
-    background:
-      radial-gradient(1200px 600px at 85% -10%, rgba(202,217,236,.45), transparent 60%),
-      radial-gradient(900px 500px at -10% 30%, rgba(217,178,92,.18), transparent 60%),
-      radial-gradient(700px 500px at 50% 110%, rgba(157,139,178,.18), transparent 60%),
-      var(--bg);
-  }
-  a{color:inherit;text-decoration:none}
-
-  /* ===== Monet cursor + trail ===== */
-  #paint-canvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:5;mix-blend-mode:multiply;opacity:.55}
-  #cursor{position:fixed;top:0;left:0;width:34px;height:34px;pointer-events:none;z-index:60;transform:translate(-50%,-50%)}
-
-  /* hide system cursor on interactive elements too, restore inside textareas */
-  button,a,input,textarea{cursor:none}
-  /* ===== Layout ===== */
-  .wrap{max-width:1240px;margin:0 auto;padding:28px 36px 80px;position:relative;z-index:10}
-
-  /* top window chrome (echo of app) */
-  .chrome{
-    display:flex;align-items:center;justify-content:space-between;
-    background:var(--paper);border:1px solid var(--line);border-radius:14px;
-    padding:14px 18px;box-shadow:0 1px 0 rgba(0,0,0,.02);
-  }
-  .chrome .left{display:flex;align-items:center;gap:12px}
-  .logo-dot{
-    width:22px;height:22px;border-radius:8px;
-    background:
-      radial-gradient(circle at 30% 30%, #b7c8e0, #4d6b94 55%, #1f3357 100%);
-    box-shadow:inset 0 1px 2px rgba(255,255,255,.4), 0 2px 6px rgba(47,77,122,.25);
-  }
-  .brand{font-weight:700;letter-spacing:.2px}
-  .brand small{font-weight:400;color:var(--muted);margin-left:8px;font-size:12.5px}
-  .nav{display:flex;gap:8px;align-items:center}
-  .pill{
-    padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--paper);
-    font-size:13.5px;color:var(--ink-soft);transition:all .2s;
-  }
-  .pill.on{background:var(--blue-soft);border-color:#cdd9ee;color:var(--blue-deep)}
-  .pill:hover{background:#f1ecdf}
-
-  /* ===== Hero ===== */
-  .hero{
-    margin-top:28px;
-    display:grid;grid-template-columns:1.15fr .85fr;gap:28px;align-items:stretch;
-  }
-  .hero-left{
-    background:var(--paper);
-    border:1px solid var(--line);
-    border-radius:22px;
-    padding:44px 44px 38px;
-    position:relative;overflow:hidden;
-  }
-  .eyebrow{
-    display:inline-flex;align-items:center;gap:8px;
-    font-size:12.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--blue-deep);
-    background:var(--blue-soft);padding:6px 12px;border-radius:999px;border:1px solid #d8e2f3;
-    font-family:"JetBrains Mono",monospace;
-  }
-  h1{
-    font-family:"Noto Serif SC",serif;
-    font-weight:700;
-    font-size:62px;line-height:1.08;letter-spacing:-.5px;
-    margin:18px 0 12px;
-  }
-  h1 .accent{
-    background:linear-gradient(120deg, #4d6b94 0%, #6b8eb8 35%, #9d8bb2 70%, #c98a86 100%);
-    -webkit-background-clip:text;background-clip:text;color:transparent;
-  }
-  .lead{font-size:17px;line-height:1.7;color:var(--ink-soft);max-width:560px;margin:0 0 26px}
-  .lead b{color:var(--ink);font-weight:500}
-
-  .cta-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:10px;position:relative;z-index:2}
-  .btn{
-    display:inline-flex;align-items:center;gap:10px;
-    padding:13px 22px;border-radius:14px;border:1px solid var(--ink);
-    background:var(--ink);color:#fbf8f1;font-weight:500;font-size:15px;
-    transition:transform .15s ease, box-shadow .2s;
-  }
-  .btn:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(26,28,31,.18)}
-  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line-2)}
-  .btn.ghost:hover{background:#f1ecdf}
-  .btn .arrow{transition:transform .2s}
-  .btn:hover .arrow{transform:translateX(3px)}
-  .platforms{display:flex;gap:14px;color:var(--muted);font-size:13px;align-items:center;margin-left:6px}
-  .platforms span{display:inline-flex;align-items:center;gap:6px}
-  .platforms i{width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block}
-
-  /* hero 角落水彩渐变 —— 柔和的多色径向叠加 + 强模糊，避免硬边压住下方文字 */
-  .hero-art{
-    position:absolute;right:-80px;bottom:-110px;
-    width:520px;height:360px;
-    pointer-events:none;z-index:1;
-    background:
-      radial-gradient(circle at 28% 62%, rgba(202,217,236,.85) 0%, rgba(202,217,236,0) 55%),
-      radial-gradient(circle at 70% 38%, rgba(217,178,92,.55)  0%, rgba(217,178,92,0)  50%),
-      radial-gradient(circle at 60% 78%, rgba(157,139,178,.65) 0%, rgba(157,139,178,0) 55%),
-      radial-gradient(circle at 22% 32%, rgba(143,166,122,.45) 0%, rgba(143,166,122,0) 50%),
-      radial-gradient(circle at 82% 70%, rgba(201,138,134,.45) 0%, rgba(201,138,134,0) 50%);
-    filter:blur(34px) saturate(1.05);
-    border-radius:50%;
-    opacity:.7;
-  }
-
-  /* right-side preview card */
-  .preview{
-    background:var(--paper);border:1px solid var(--line);border-radius:22px;
-    padding:18px;display:flex;flex-direction:column;gap:14px;position:relative;overflow:hidden;
-  }
-  .preview-head{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:12px}
-  .traffic{display:flex;gap:6px}
-  .traffic span{width:10px;height:10px;border-radius:50%;background:#e7dfca}
-  .traffic span:nth-child(1){background:#d6b5b3}
-  .traffic span:nth-child(2){background:#d9c98c}
-  .traffic span:nth-child(3){background:#a7bf94}
-  .mini-search{
-    border:1px solid var(--line);border-radius:14px;padding:14px;background:#fcfaf3;
-    font-size:13px;color:var(--muted);
-  }
-  .mini-tags{display:flex;gap:8px;flex-wrap:wrap}
-  .tag{
-    padding:5px 10px;border-radius:999px;font-size:12px;
-    background:#f1ecdf;color:var(--ink-soft);border:1px solid var(--line);
-  }
-  .tag.b{background:var(--blue-soft);color:var(--blue-deep);border-color:#d8e2f3}
-  .cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .card{
-    background:#fcfaf3;border:1px solid var(--line);border-radius:14px;padding:12px;
-    font-size:12.5px;line-height:1.55;color:var(--ink-soft);min-height:96px;
-    display:flex;flex-direction:column;justify-content:space-between;
-  }
-  .card .star{align-self:flex-end;color:#c9b88a;font-size:14px}
-  .card .meta{color:var(--muted);font-size:11px;margin-top:8px;display:flex;gap:8px;align-items:center}
-  .card .meta .tg{background:#eee6cf;padding:2px 7px;border-radius:6px}
-  .card.b{background:#f3f7fd}
-
-  /* floating ball mini visualization */
-  .ball{
-    position:absolute;right:22px;top:84px;width:54px;height:54px;border-radius:50%;
-    background:
-      radial-gradient(circle at 30% 28%, #ffffff, #c8d6ea 35%, #4d6b94 75%, #243a5c 100%);
-    box-shadow:0 10px 30px rgba(47,77,122,.35), inset 0 2px 6px rgba(255,255,255,.5);
-  }
-  .ball::after{
-    content:"";position:absolute;inset:-14px;border-radius:50%;
-    background:radial-gradient(circle, rgba(157,139,178,.25), transparent 60%);
-    filter:blur(6px);z-index:-1;
-  }
-
-  /* ===== Section: Features ===== */
-  section.feats{margin-top:46px}
-  .sec-head{display:flex;align-items:end;justify-content:space-between;margin-bottom:18px}
-  .sec-head h2{font-family:"Noto Serif SC",serif;font-weight:700;font-size:30px;letter-spacing:-.2px;margin:0}
-  .sec-head .kicker{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--muted);letter-spacing:.16em;text-transform:uppercase}
-
-  .feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-  .feat{
-    background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:24px;
-    display:flex;flex-direction:column;gap:10px;min-height:200px;position:relative;overflow:hidden;
-  }
-  .feat .num{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--muted);letter-spacing:.16em}
-  .feat h3{font-family:"Noto Serif SC",serif;font-weight:700;font-size:20px;margin:0}
-  .feat p{margin:0;color:var(--ink-soft);font-size:14px;line-height:1.65}
-  .feat .swatch{
-    position:absolute;right:-30px;top:-30px;width:120px;height:120px;border-radius:50%;
-    filter:blur(2px);opacity:.55;
-  }
-  .feat:nth-child(1) .swatch{background:radial-gradient(circle, #cad9ec, transparent 70%)}
-  .feat:nth-child(2) .swatch{background:radial-gradient(circle, #d9b25c80, transparent 70%)}
-  .feat:nth-child(3) .swatch{background:radial-gradient(circle, #9d8bb280, transparent 70%)}
-  .feat:nth-child(4) .swatch{background:radial-gradient(circle, #8fa67a80, transparent 70%)}
-  .feat:nth-child(5) .swatch{background:radial-gradient(circle, #c98a8680, transparent 70%)}
-  .feat:nth-child(6) .swatch{background:radial-gradient(circle, #b8a4c280, transparent 70%)}
-
-  /* ===== Download section ===== */
-  .download{
-    margin-top:54px;position:relative;
-    background:var(--paper);border:1px solid var(--line);border-radius:24px;
-    padding:42px 44px;overflow:hidden;
-  }
-  .download .deco{
-    position:absolute;inset:0;pointer-events:none;opacity:.65;
-  }
-  .dl-inner{position:relative;display:grid;grid-template-columns:1.05fr 1fr;gap:36px;align-items:center}
-  .dl-left h2{font-family:"Noto Serif SC",serif;font-size:42px;line-height:1.1;margin:8px 0 12px;font-weight:700}
-  .dl-left h2 em{font-style:normal;color:var(--blue-deep)}
-  .dl-left p{margin:0 0 22px;color:var(--ink-soft);font-size:15.5px;line-height:1.7;max-width:520px}
-  .dl-meta{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--muted);font-family:"JetBrains Mono",monospace}
-  .dl-meta span b{color:var(--ink);font-weight:500}
-
-  .dl-cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-  .dl-card{
-    background:#fcfaf3;border:1px solid var(--line);border-radius:18px;padding:20px;
-    display:flex;flex-direction:column;gap:12px;transition:all .2s;position:relative;
-  }
-  .dl-card:hover{transform:translateY(-2px);border-color:var(--line-2);box-shadow:0 12px 28px rgba(40,30,10,.07)}
-  .dl-card .os{
-    width:38px;height:38px;border-radius:11px;background:var(--bg-2);
-    display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--ink-soft);
-    font-family:"JetBrains Mono",monospace;font-size:13px;
-  }
-  .dl-card h4{margin:0;font-size:16px;font-weight:600}
-  .dl-card .sz{color:var(--muted);font-size:12px;font-family:"JetBrains Mono",monospace}
-  .dl-btn{
-    margin-top:auto;display:inline-flex;align-items:center;justify-content:space-between;gap:10px;
-    padding:11px 14px;border-radius:12px;background:var(--ink);color:#fbf8f1;font-size:14px;font-weight:500;
-    border:none;
-  }
-  .dl-btn.alt{background:var(--blue-soft);color:var(--blue-deep);border:1px solid #d8e2f3}
-  .dl-card.full{grid-column:span 2;background:linear-gradient(120deg,#f7f1e1,#f3eedb)}
-  .dl-card.full h4{font-size:18px}
-
-  /* ===== How it works ===== */
-  .how{margin-top:54px;display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-  .step{
-    background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:24px;position:relative;
-  }
-  .step .n{
-    font-family:"Noto Serif SC",serif;font-size:48px;color:var(--blue-deep);opacity:.18;
-    position:absolute;right:18px;top:8px;font-weight:700;
-  }
-  .step h4{margin:0 0 8px;font-size:16px;font-weight:600}
-  .step p{margin:0;color:var(--ink-soft);font-size:14px;line-height:1.65}
-
-  /* ===== FAQ ===== */
-  .faq{margin-top:54px;background:var(--paper);border:1px solid var(--line);border-radius:22px;padding:32px 36px}
-  details{border-bottom:1px solid var(--line);padding:16px 0}
-  details:last-child{border-bottom:none}
-  summary{cursor:none;list-style:none;font-weight:500;font-size:16px;display:flex;justify-content:space-between;align-items:center}
-  summary::-webkit-details-marker{display:none}
-  summary .plus{font-family:"JetBrains Mono",monospace;color:var(--muted);transition:transform .2s}
-  details[open] summary .plus{transform:rotate(45deg);color:var(--blue-deep)}
-  details p{margin:10px 0 0;color:var(--ink-soft);font-size:14.5px;line-height:1.7}
-
-  /* ===== Footer ===== */
-  footer{
-    margin-top:48px;padding:28px 0 0;border-top:1px solid var(--line);
-    display:flex;justify-content:space-between;color:var(--muted);font-size:13px;flex-wrap:wrap;gap:14px;
-  }
-  footer .links{display:flex;gap:18px}
-
-  /* responsive */
-  @media (max-width: 920px){
-    .hero{grid-template-columns:1fr}
-    .feat-grid{grid-template-columns:1fr 1fr}
-    .how{grid-template-columns:1fr}
-    .dl-inner{grid-template-columns:1fr}
-    h1{font-size:46px}
-  }
-  @media (max-width: 620px){
-    .wrap{padding:18px 16px 60px}
-    .feat-grid{grid-template-columns:1fr}
-    .dl-cards{grid-template-columns:1fr}
-    .dl-card.full{grid-column:span 1}
-    h1{font-size:38px}
-    .hero-left{padding:28px 24px}
-    .download{padding:28px 22px}
-  }
-</style>
-</head>
-<body>
-
-<!-- Monet trail canvas + custom cursor -->
-<canvas id="paint-canvas"></canvas>
-<svg id="cursor" viewBox="0 0 40 40" aria-hidden="true">
-  <defs>
-    <radialGradient id="cg" cx="35%" cy="30%" r="70%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity=".9"/>
-      <stop offset="35%" stop-color="#cad9ec"/>
-      <stop offset="80%" stop-color="#4d6b94"/>
-      <stop offset="100%" stop-color="#243a5c"/>
-    </radialGradient>
-  </defs>
-  <circle cx="20" cy="20" r="9" fill="url(#cg)" opacity=".95"/>
-  <circle cx="20" cy="20" r="13" fill="none" stroke="#9d8bb2" stroke-opacity=".5" stroke-width=".8"/>
-</svg>
-
-<div class="wrap">
-
-  <!-- chrome -->
-  <nav class="chrome">
-    <div class="left">
-      <span class="logo-dot"></span>
-      <span class="brand">Prompt Hub <small>桌面提示词器</small></span>
-    </div>
-    <div class="nav">
-      <a class="pill on" href="#home">首页</a>
-      <a class="pill" href="#features">功能</a>
-      <a class="pill" href="#download">下载</a>
-      <a class="pill" href="#faq">FAQ</a>
-      <a class="pill" href="https://github.com/Joey-233/PromptHub" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
-    </div>
-  </nav>
-
-  <!-- hero -->
-  <section class="hero" id="home">
-    <div class="hero-left">
-      <span class="eyebrow">v0.1 · LOCAL · OPEN SOURCE</span>
-      <h1>悬浮于桌面的<br/><span class="accent">提示词工坊</span>。</h1>
-      <p class="lead">
-        一颗常驻桌面的悬浮球，<b>瞬间收录灵感</b>、<b>分类管理</b>所有提示词，
-        直接对接出图服务边试边改。数据全部本地存储，像油彩一样，留在你的画板上。
-      </p>
-      <div class="cta-row">
-        <a class="btn" href="#download">
-          免费下载 <span class="arrow">→</span>
-        </a>
-        <a class="btn ghost" href="#features">查看功能</a>
-        <div class="platforms">
-          <span><i></i>Windows</span>
-          <span><i></i>macOS</span>
-        </div>
-      </div>
-
-      <!-- hero 角落水彩渐变（纯 CSS 多色径向叠加 + 强模糊） -->
-      <div class="hero-art" aria-hidden="true"></div>
-    </div>
-
-    <div class="preview" aria-hidden="true">
-      <div class="preview-head">
-        <div class="traffic"><span></span><span></span><span></span></div>
-        <span>提示词库 · 14 条</span>
-      </div>
-      <div class="mini-search">搜索标题或内容…</div>
-      <div class="mini-tags">
-        <span class="tag b">全部</span>
-        <span class="tag">绘图</span>
-        <span class="tag">LLM</span>
-        <span class="tag">人设</span>
-        <span class="tag">GPT</span>
-      </div>
-      <div class="cards">
-        <div class="card">
-          <div>3:4 比例，简版画风格，手绘速写质感，线条粗糙有颗粒感…</div>
-          <div class="meta"><span class="tg">绘图</span><span>使用 3 次</span></div>
-        </div>
-        <div class="card b">
-          <div>生成面部特征以及全身三视图，最左侧占满三分之一的位置是…</div>
-          <div class="meta"><span class="tg">人设</span><span>5 天前</span></div>
-        </div>
-        <div class="card">
-          <div>基于此角色和背景，请制作一份类似官方设定资料的横版角色设定图…</div>
-          <div class="meta"><span class="tg">GPT</span><span>已收藏</span></div>
-        </div>
-        <div class="card">
-          <div>清晨薄雾中的睡莲池塘，柔和光线，印象派笔触，色彩层叠…</div>
-          <div class="meta"><span class="tg">绘图</span><span>尚未使用</span></div>
-        </div>
-      </div>
-      <div class="ball"></div>
-    </div>
-  </section>
-
-  <!-- features -->
-  <section class="feats" id="features">
-    <div class="sec-head">
-      <h2>把灵感收进口袋里。</h2>
-      <span class="kicker">FEATURES · 06</span>
-    </div>
-    <div class="feat-grid">
-      <div class="feat"><span class="swatch"></span>
-        <span class="num">01</span>
-        <h3>悬浮球入口</h3>
-        <p>常驻桌面最上层，单击展菜单，双击直达主面板，长按拖到任意位置。不抢镜，但始终待命。</p>
-      </div>
-      <div class="feat"><span class="swatch"></span>
-        <span class="num">02</span>
-        <h3>快速收录</h3>
-        <p>迷你输入框 / 剪贴板一键导入，标题自动取前 20 字符。Ctrl+Enter 立刻入库，灵感永不流失。</p>
-      </div>
-      <div class="feat"><span class="swatch"></span>
-        <span class="num">03</span>
-        <h3>分类与标签</h3>
-        <p>绘图 / LLM 双类型，逗号分隔的自定义标签，关键词搜索，井井有条。</p>
-      </div>
-      <div class="feat"><span class="swatch"></span>
-        <span class="num">04</span>
-        <h3>AI 优化</h3>
-        <p>一键调用 Claude / OpenAI，增强细节、精简表达或自定义指令，原文与优化版并列对比采纳。</p>
-      </div>
-      <div class="feat"><span class="swatch"></span>
-        <span class="num">05</span>
-        <h3>出图测试台</h3>
-        <p>直连 Stable Diffusion WebUI / DALL·E 3，临时修改不动原文，多图并排对比，满意再存回。</p>
-      </div>
-      <div class="feat"><span class="swatch"></span>
-        <span class="num">06</span>
-        <h3>本地优先</h3>
-        <p>SQLite 本地数据库，API Key 经 Electron safeStorage 加密。JSON 导入导出，资产完全自有。</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- how -->
-  <section class="how">
-    <div class="step">
-      <span class="n">01</span>
-      <h4>记下灵感</h4>
-      <p>看到好提示词复制；单击悬浮球，「粘贴板导入」。悬浮球闪烁——保存成功。</p>
-    </div>
-    <div class="step">
-      <span class="n">02</span>
-      <h4>整理与优化</h4>
-      <p>双击悬浮球打开主面板。打标签、加备注，或交给 AI 优化按钮润色。</p>
-    </div>
-    <div class="step">
-      <span class="n">03</span>
-      <h4>边试边改</h4>
-      <p>切换到测试台，调参数、出图、对比，满意的版本一键存回提示词库。</p>
-    </div>
-  </section>
-
-  <!-- download -->
-  <section class="download" id="download">
-    <svg class="deco" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-      <g opacity=".5">
-        <ellipse cx="120" cy="60" rx="220" ry="55" fill="#cad9ec"/>
-        <ellipse cx="1080" cy="340" rx="260" ry="60" fill="#9d8bb2" fill-opacity=".5"/>
-        <ellipse cx="980" cy="80" rx="140" ry="36" fill="#d9b25c" fill-opacity=".55"/>
-        <ellipse cx="220" cy="340" rx="180" ry="40" fill="#8fa67a" fill-opacity=".45"/>
-      </g>
-    </svg>
-    <div class="dl-inner">
-      <div class="dl-left">
-        <span class="eyebrow">FREE · OPEN SOURCE · MIT</span>
-        <h2>免费下载，<em>无内购</em>，<br/>数据永远是你自己的。</h2>
-        <p>Prompt Hub 是完全免费的开源软件。安装包约 100MB，桌面占用极低，开机自启可选。
-          支持 Windows 10+、macOS 11+。</p>
-        <div class="dl-meta">
-          <span><b>v0.2.1</b> · 2026-06</span>
-          <span>SHA256 ✓ 已校验</span>
-          <span>License · MIT</span>
-        </div>
-      </div>
-      <div class="dl-cards">
-        <div class="dl-card">
-          <div class="os">Win</div>
-          <h4>Windows</h4>
-          <div class="sz">.exe · 103 MB · x64</div>
-          <button class="dl-btn" data-platform="Windows" data-url="/prompthub/download/PromptHub-0.2.1-Setup-x64.exe" onclick="startDownload(this)">免费下载 <span>↓</span></button>
-        </div>
-        <div class="dl-card">
-          <div class="os" style="background:#ece6d5">macOS</div>
-          <h4>macOS</h4>
-          <div class="sz">.dmg · 92.8 MB · Apple Silicon / Intel</div>
-          <button class="dl-btn" onclick="ping(this,'macOS')">免费下载 <span>↓</span></button>
-        </div>
-        <div class="dl-card full">
-          <div class="os" style="background:#e7dec8">src</div>
-          <h4>源代码</h4>
-          <div class="sz">GitHub · MIT License</div>
-          <div class="src-pitch" style="margin:6px 0 14px;font-size:13px;line-height:1.6;color:rgba(60,60,60,0.72);letter-spacing:0.02em">
-            ⭐ 如果 Prompt Hub 帮到你，欢迎去 GitHub 点个Star✨
-          </div>
-          <a class="dl-btn alt" href="https://github.com/Joey-233/PromptHub" target="_blank" rel="noopener noreferrer" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center">查看仓库 · 顺手 Star ⭐</a>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- FAQ -->
-  <section class="faq" id="faq">
-    <div class="sec-head" style="margin-bottom:6px">
-      <h2>常见问题</h2>
-      <span class="kicker">FAQ</span>
-    </div>
-    <details open>
-      <summary>完全免费吗？<span class="plus">+</span></summary>
-      <p>是的，Prompt Hub 完全免费、开源，没有任何内购或付费功能。MIT 协议允许商业使用。</p>
-    </details>
-    <details>
-      <summary>我的提示词存在哪里？会上传云端吗？<span class="plus">+</span></summary>
-      <p>全部存在本地 SQLite 数据库，不会上传任何服务器。可在设置中查看数据库路径，并随时导出 JSON 备份。</p>
-    </details>
-    <details>
-      <summary>API Key 安全吗？<span class="plus">+</span></summary>
-      <p>使用 Electron 提供的 safeStorage 加密存储，只能在你的当前用户账户下解密读取。</p>
-    </details>
-    <details>
-      <summary>支持哪些出图服务？<span class="plus">+</span></summary>
-      <p>当前支持 Stable Diffusion WebUI 与 OpenAI DALL·E 3，后续将通过自定义 provider 接入更多服务。</p>
-    </details>
-    <details>
-      <summary>遇到问题、想反馈 bug 或建议怎么联系？<span class="plus">+</span></summary>
-      <p>
-        欢迎随时联系作者 Joey：<br>
-        · 微信：<b>15618674980</b>（请备注「Prompt Hub」）<br>
-        · 邮箱：<a href="mailto:15618674980@163.com">15618674980@163.com</a><br>
-        · GitHub Issues：<a href="https://github.com/Joey-233/PromptHub/issues" target="_blank" rel="noopener noreferrer">github.com/Joey-233/PromptHub/issues</a>
-      </p>
-    </details>
-  </section>
-
-  <footer>
-    <div><a href="https://joeystudio.art" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none">joeystudio.art</a> · 莫奈丽莎AI工作室出品</div>
-    <div class="links">
-      <a href="#">文档</a>
-      <a href="#">更新日志</a>
-      <a href="https://github.com/Joey-233/PromptHub" target="_blank" rel="noopener noreferrer">GitHub</a>
-      <a href="https://github.com/Joey-233/PromptHub/issues" target="_blank" rel="noopener noreferrer">反馈</a>
-    </div>
-  </footer>
-
-</div>
-
-<script>
-/* ===== Custom Monet cursor + oil paint trail ===== */
-(function(){
-  const cur = document.getElementById('cursor');
-  const cvs = document.getElementById('paint-canvas');
-  const ctx = cvs.getContext('2d');
-  let W=0,H=0,dpr=Math.min(2,window.devicePixelRatio||1);
-
-  function resize(){
-    W = window.innerWidth; H = window.innerHeight;
-    cvs.width = W*dpr; cvs.height = H*dpr;
-    cvs.style.width = W+'px'; cvs.style.height = H+'px';
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-  }
-  resize();
-  window.addEventListener('resize',resize);
-
-  // Monet-inspired palette: water-lily blues, lilac, ochre, mossy green, rose, sun
-  const palette = [
-    [202,217,236, .55],  // sky blue
-    [157,139,178, .45],  // lilac
-    [217,178,92,  .40],  // ochre
-    [143,166,122, .42],  // moss
-    [201,138,134, .42],  // rose
-    [77,107,148,  .35],  // deep blue
-    [232,222,200, .50],  // cream highlight
-  ];
-
-  let mx=W/2,my=H/2,lx=mx,ly=my,dx=0,dy=0;
-  let pressed=false;
-
-  window.addEventListener('mousemove',(e)=>{
-    mx=e.clientX; my=e.clientY;
-    cur.style.transform=`translate(${mx}px,${my}px) translate(-50%,-50%)`;
-  });
-  window.addEventListener('mousedown',()=>{pressed=true;cur.style.transform += ' scale(1.4)';});
-  window.addEventListener('mouseup',()=>{pressed=false});
-
-  // Fade trail slowly so daubs linger then dissolve like wet paint
-  function fade(){
-    ctx.globalCompositeOperation='destination-out';
-    ctx.fillStyle='rgba(0,0,0,0.012)';
-    ctx.fillRect(0,0,W,H);
-    ctx.globalCompositeOperation='source-over';
-  }
-
-  function daub(x,y,vx,vy){
-    const speed=Math.hypot(vx,vy);
-    const n = pressed? 6 : (speed>2? 3:2);
-    for(let i=0;i<n;i++){
-      const c = palette[(Math.random()*palette.length)|0];
-      const r = (pressed?14:9)+Math.random()*10 + speed*0.4;
-      const ang = Math.atan2(vy,vx) + (Math.random()-.5)*0.9;
-      const len = r*(1.4+Math.random()*1.2);
-      const ox = (Math.random()-.5)*18;
-      const oy = (Math.random()-.5)*18;
-      ctx.save();
-      ctx.translate(x+ox, y+oy);
-      ctx.rotate(ang);
-      const grad = ctx.createRadialGradient(0,0,0,0,0,len);
-      grad.addColorStop(0, `rgba(${c[0]},${c[1]},${c[2]},${c[3]})`);
-      grad.addColorStop(.6, `rgba(${c[0]},${c[1]},${c[2]},${c[3]*0.5})`);
-      grad.addColorStop(1, `rgba(${c[0]},${c[1]},${c[2]},0)`);
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.ellipse(0,0,len,r*0.55,0,0,Math.PI*2);
-      ctx.fill();
-      ctx.restore();
-    }
-  }
-
-  function loop(){
-    dx = mx-lx; dy = my-ly;
-    const d = Math.hypot(dx,dy);
-    if(d>1){
-      // interpolate so brush keeps continuous
-      const steps = Math.min(8, Math.ceil(d/8));
-      for(let s=1;s<=steps;s++){
-        const x = lx + dx*(s/steps);
-        const y = ly + dy*(s/steps);
-        daub(x,y,dx,dy);
+  <head>
+    <meta charset="utf-8" />
+    <title>Joey Prompthub — 桌面提示词器</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;700&family=Noto+Sans+SC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f3efe6;
+        --bg-2: #efe9dd;
+        --paper: #fbf8f1;
+        --ink: #1a1c1f;
+        --ink-soft: #3a3d42;
+        --muted: #6b6f76;
+        --line: #e6dfd0;
+        --line-2: #dcd3bf;
+        --blue: #cad9ec;
+        --blue-deep: #2f4d7a;
+        --blue-soft: #e8eef9;
+        --green: #8fa67a;
+        --rose: #c98a86;
+        --sun: #d9b25c;
+        --lilac: #9d8bb2;
       }
-    }
-    fade();
-    lx=mx; ly=my;
-    requestAnimationFrame(loop);
-  }
-  loop();
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: 'Noto Sans SC', 'Helvetica Neue', Helvetica, system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      body {
+        cursor: none;
+        overflow-x: hidden;
+        background:
+          radial-gradient(1200px 600px at 85% -10%, rgba(202, 217, 236, 0.45), transparent 60%),
+          radial-gradient(900px 500px at -10% 30%, rgba(217, 178, 92, 0.18), transparent 60%),
+          radial-gradient(700px 500px at 50% 110%, rgba(157, 139, 178, 0.18), transparent 60%),
+          var(--bg);
+      }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
 
-  // hide cursor when leaving window
-  document.addEventListener('mouseleave',()=>cur.style.opacity=0);
-  document.addEventListener('mouseenter',()=>cur.style.opacity=1);
-})();
+      /* ===== Monet cursor + trail ===== */
+      #paint-canvas {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 5;
+        mix-blend-mode: multiply;
+        opacity: 0.55;
+      }
+      #cursor {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 34px;
+        height: 34px;
+        pointer-events: none;
+        z-index: 60;
+        transform: translate(-50%, -50%);
+      }
 
-/* 客户端尚未上线 —— 按钮可点击但只展示「即将上线」浮层，避免静默无响应 */
-(function(){
-  const style = document.createElement('style');
-  style.textContent = `
+      /* hide system cursor on interactive elements too, restore inside textareas */
+      button,
+      a,
+      input,
+      textarea {
+        cursor: none;
+      }
+      /* ===== Layout ===== */
+      .wrap {
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 28px 36px 80px;
+        position: relative;
+        z-index: 10;
+      }
+
+      /* top window chrome (echo of app) */
+      .chrome {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px 18px;
+        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02);
+      }
+      .chrome .left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .logo-dot {
+        width: 22px;
+        height: 22px;
+        border-radius: 8px;
+        background: radial-gradient(circle at 30% 30%, #b7c8e0, #4d6b94 55%, #1f3357 100%);
+        box-shadow:
+          inset 0 1px 2px rgba(255, 255, 255, 0.4),
+          0 2px 6px rgba(47, 77, 122, 0.25);
+      }
+      .brand {
+        font-weight: 700;
+        letter-spacing: 0.2px;
+      }
+      .brand small {
+        font-weight: 400;
+        color: var(--muted);
+        margin-left: 8px;
+        font-size: 12.5px;
+      }
+      .nav {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .pill {
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--paper);
+        font-size: 13.5px;
+        color: var(--ink-soft);
+        transition: all 0.2s;
+      }
+      .pill.on {
+        background: var(--blue-soft);
+        border-color: #cdd9ee;
+        color: var(--blue-deep);
+      }
+      .pill:hover {
+        background: #f1ecdf;
+      }
+
+      /* ===== Hero ===== */
+      .hero {
+        margin-top: 28px;
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 28px;
+        align-items: stretch;
+      }
+      .hero-left {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        padding: 44px 44px 38px;
+        position: relative;
+        overflow: hidden;
+      }
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12.5px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--blue-deep);
+        background: var(--blue-soft);
+        padding: 6px 12px;
+        border-radius: 999px;
+        border: 1px solid #d8e2f3;
+        font-family: 'JetBrains Mono', monospace;
+      }
+      h1 {
+        font-family: 'Noto Serif SC', serif;
+        font-weight: 700;
+        font-size: 62px;
+        line-height: 1.08;
+        letter-spacing: -0.5px;
+        margin: 18px 0 12px;
+      }
+      h1 .accent {
+        background: linear-gradient(120deg, #4d6b94 0%, #6b8eb8 35%, #9d8bb2 70%, #c98a86 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .lead {
+        font-size: 17px;
+        line-height: 1.7;
+        color: var(--ink-soft);
+        max-width: 560px;
+        margin: 0 0 26px;
+      }
+      .lead b {
+        color: var(--ink);
+        font-weight: 500;
+      }
+
+      .cta-row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-top: 10px;
+        position: relative;
+        z-index: 2;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 13px 22px;
+        border-radius: 14px;
+        border: 1px solid var(--ink);
+        background: var(--ink);
+        color: #fbf8f1;
+        font-weight: 500;
+        font-size: 15px;
+        transition:
+          transform 0.15s ease,
+          box-shadow 0.2s;
+      }
+      .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 24px rgba(26, 28, 31, 0.18);
+      }
+      .btn.ghost {
+        background: transparent;
+        color: var(--ink);
+        border: 1px solid var(--line-2);
+      }
+      .btn.ghost:hover {
+        background: #f1ecdf;
+      }
+      .btn .arrow {
+        transition: transform 0.2s;
+      }
+      .btn:hover .arrow {
+        transform: translateX(3px);
+      }
+      .platforms {
+        display: flex;
+        gap: 14px;
+        color: var(--muted);
+        font-size: 13px;
+        align-items: center;
+        margin-left: 6px;
+      }
+      .platforms span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .platforms i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--green);
+        display: inline-block;
+      }
+
+      /* hero 角落水彩渐变 —— 柔和的多色径向叠加 + 强模糊，避免硬边压住下方文字 */
+      .hero-art {
+        position: absolute;
+        right: -80px;
+        bottom: -110px;
+        width: 520px;
+        height: 360px;
+        pointer-events: none;
+        z-index: 1;
+        background:
+          radial-gradient(
+            circle at 28% 62%,
+            rgba(202, 217, 236, 0.85) 0%,
+            rgba(202, 217, 236, 0) 55%
+          ),
+          radial-gradient(
+            circle at 70% 38%,
+            rgba(217, 178, 92, 0.55) 0%,
+            rgba(217, 178, 92, 0) 50%
+          ),
+          radial-gradient(
+            circle at 60% 78%,
+            rgba(157, 139, 178, 0.65) 0%,
+            rgba(157, 139, 178, 0) 55%
+          ),
+          radial-gradient(
+            circle at 22% 32%,
+            rgba(143, 166, 122, 0.45) 0%,
+            rgba(143, 166, 122, 0) 50%
+          ),
+          radial-gradient(
+            circle at 82% 70%,
+            rgba(201, 138, 134, 0.45) 0%,
+            rgba(201, 138, 134, 0) 50%
+          );
+        filter: blur(34px) saturate(1.05);
+        border-radius: 50%;
+        opacity: 0.7;
+      }
+
+      /* right-side preview card */
+      .preview {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        position: relative;
+        overflow: hidden;
+      }
+      .preview-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .traffic {
+        display: flex;
+        gap: 6px;
+      }
+      .traffic span {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #e7dfca;
+      }
+      .traffic span:nth-child(1) {
+        background: #d6b5b3;
+      }
+      .traffic span:nth-child(2) {
+        background: #d9c98c;
+      }
+      .traffic span:nth-child(3) {
+        background: #a7bf94;
+      }
+      .mini-search {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px;
+        background: #fcfaf3;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .mini-tags {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .tag {
+        padding: 5px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        background: #f1ecdf;
+        color: var(--ink-soft);
+        border: 1px solid var(--line);
+      }
+      .tag.b {
+        background: var(--blue-soft);
+        color: var(--blue-deep);
+        border-color: #d8e2f3;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .card {
+        background: #fcfaf3;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 12px;
+        font-size: 12.5px;
+        line-height: 1.55;
+        color: var(--ink-soft);
+        min-height: 96px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .card .star {
+        align-self: flex-end;
+        color: #c9b88a;
+        font-size: 14px;
+      }
+      .card .meta {
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 8px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .card .meta .tg {
+        background: #eee6cf;
+        padding: 2px 7px;
+        border-radius: 6px;
+      }
+      .card.b {
+        background: #f3f7fd;
+      }
+
+      /* floating ball mini visualization */
+      .ball {
+        position: absolute;
+        right: 22px;
+        top: 84px;
+        width: 54px;
+        height: 54px;
+        border-radius: 50%;
+        background: radial-gradient(
+          circle at 30% 28%,
+          #ffffff,
+          #c8d6ea 35%,
+          #4d6b94 75%,
+          #243a5c 100%
+        );
+        box-shadow:
+          0 10px 30px rgba(47, 77, 122, 0.35),
+          inset 0 2px 6px rgba(255, 255, 255, 0.5);
+      }
+      .ball::after {
+        content: '';
+        position: absolute;
+        inset: -14px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(157, 139, 178, 0.25), transparent 60%);
+        filter: blur(6px);
+        z-index: -1;
+      }
+
+      /* ===== Section: Features ===== */
+      section.feats {
+        margin-top: 46px;
+      }
+      .sec-head {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        margin-bottom: 18px;
+      }
+      .sec-head h2 {
+        font-family: 'Noto Serif SC', serif;
+        font-weight: 700;
+        font-size: 30px;
+        letter-spacing: -0.2px;
+        margin: 0;
+      }
+      .sec-head .kicker {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        color: var(--muted);
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      .feat-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+      }
+      .feat {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-height: 200px;
+        position: relative;
+        overflow: hidden;
+      }
+      .feat .num {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        color: var(--muted);
+        letter-spacing: 0.16em;
+      }
+      .feat h3 {
+        font-family: 'Noto Serif SC', serif;
+        font-weight: 700;
+        font-size: 20px;
+        margin: 0;
+      }
+      .feat p {
+        margin: 0;
+        color: var(--ink-soft);
+        font-size: 14px;
+        line-height: 1.65;
+      }
+      .feat .swatch {
+        position: absolute;
+        right: -30px;
+        top: -30px;
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        filter: blur(2px);
+        opacity: 0.55;
+      }
+      .feat:nth-child(1) .swatch {
+        background: radial-gradient(circle, #cad9ec, transparent 70%);
+      }
+      .feat:nth-child(2) .swatch {
+        background: radial-gradient(circle, #d9b25c80, transparent 70%);
+      }
+      .feat:nth-child(3) .swatch {
+        background: radial-gradient(circle, #9d8bb280, transparent 70%);
+      }
+      .feat:nth-child(4) .swatch {
+        background: radial-gradient(circle, #8fa67a80, transparent 70%);
+      }
+      .feat:nth-child(5) .swatch {
+        background: radial-gradient(circle, #c98a8680, transparent 70%);
+      }
+      .feat:nth-child(6) .swatch {
+        background: radial-gradient(circle, #b8a4c280, transparent 70%);
+      }
+
+      /* ===== Download section ===== */
+      .download {
+        margin-top: 54px;
+        position: relative;
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        padding: 42px 44px;
+        overflow: hidden;
+      }
+      .download .deco {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.65;
+      }
+      .dl-inner {
+        position: relative;
+        display: grid;
+        grid-template-columns: 1.05fr 1fr;
+        gap: 36px;
+        align-items: center;
+      }
+      .dl-left h2 {
+        font-family: 'Noto Serif SC', serif;
+        font-size: 42px;
+        line-height: 1.1;
+        margin: 8px 0 12px;
+        font-weight: 700;
+      }
+      .dl-left h2 em {
+        font-style: normal;
+        color: var(--blue-deep);
+      }
+      .dl-left p {
+        margin: 0 0 22px;
+        color: var(--ink-soft);
+        font-size: 15.5px;
+        line-height: 1.7;
+        max-width: 520px;
+      }
+      .dl-meta {
+        display: flex;
+        gap: 18px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: var(--muted);
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .dl-meta span b {
+        color: var(--ink);
+        font-weight: 500;
+      }
+
+      .dl-cards {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      .dl-card {
+        background: #fcfaf3;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        transition: all 0.2s;
+        position: relative;
+      }
+      .dl-card:hover {
+        transform: translateY(-2px);
+        border-color: var(--line-2);
+        box-shadow: 0 12px 28px rgba(40, 30, 10, 0.07);
+      }
+      .dl-card .os {
+        width: 38px;
+        height: 38px;
+        border-radius: 11px;
+        background: var(--bg-2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        color: var(--ink-soft);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13px;
+      }
+      .dl-card h4 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .dl-card .sz {
+        color: var(--muted);
+        font-size: 12px;
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .release-status {
+        min-height: 38px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.55;
+      }
+      .release-status[data-state='ready'] {
+        color: #4d6b55;
+      }
+      .release-status[data-state='error'] {
+        color: #8a6540;
+      }
+      .dl-btn {
+        margin-top: auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 11px 14px;
+        border-radius: 12px;
+        background: var(--ink);
+        color: #fbf8f1;
+        font-size: 14px;
+        font-weight: 500;
+        border: none;
+      }
+      .dl-btn.alt {
+        background: var(--blue-soft);
+        color: var(--blue-deep);
+        border: 1px solid #d8e2f3;
+      }
+      .dl-card.full {
+        grid-column: span 2;
+        background: linear-gradient(120deg, #f7f1e1, #f3eedb);
+      }
+      .dl-card.full h4 {
+        font-size: 18px;
+      }
+
+      /* ===== How it works ===== */
+      .how {
+        margin-top: 54px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+      }
+      .step {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 24px;
+        position: relative;
+      }
+      .step .n {
+        font-family: 'Noto Serif SC', serif;
+        font-size: 48px;
+        color: var(--blue-deep);
+        opacity: 0.18;
+        position: absolute;
+        right: 18px;
+        top: 8px;
+        font-weight: 700;
+      }
+      .step h4 {
+        margin: 0 0 8px;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .step p {
+        margin: 0;
+        color: var(--ink-soft);
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      /* ===== FAQ ===== */
+      .faq {
+        margin-top: 54px;
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        padding: 32px 36px;
+      }
+      details {
+        border-bottom: 1px solid var(--line);
+        padding: 16px 0;
+      }
+      details:last-child {
+        border-bottom: none;
+      }
+      summary {
+        cursor: none;
+        list-style: none;
+        font-weight: 500;
+        font-size: 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      summary::-webkit-details-marker {
+        display: none;
+      }
+      summary .plus {
+        font-family: 'JetBrains Mono', monospace;
+        color: var(--muted);
+        transition: transform 0.2s;
+      }
+      details[open] summary .plus {
+        transform: rotate(45deg);
+        color: var(--blue-deep);
+      }
+      details p {
+        margin: 10px 0 0;
+        color: var(--ink-soft);
+        font-size: 14.5px;
+        line-height: 1.7;
+      }
+
+      /* ===== Footer ===== */
+      footer {
+        margin-top: 48px;
+        padding: 28px 0 0;
+        border-top: 1px solid var(--line);
+        display: flex;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 13px;
+        flex-wrap: wrap;
+        gap: 14px;
+      }
+      footer .links {
+        display: flex;
+        gap: 18px;
+      }
+
+      /* responsive */
+      @media (max-width: 920px) {
+        .hero {
+          grid-template-columns: 1fr;
+        }
+        .feat-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+        .how {
+          grid-template-columns: 1fr;
+        }
+        .dl-inner {
+          grid-template-columns: 1fr;
+        }
+        h1 {
+          font-size: 46px;
+        }
+      }
+      @media (max-width: 620px) {
+        .wrap {
+          padding: 18px 16px 60px;
+        }
+        .feat-grid {
+          grid-template-columns: 1fr;
+        }
+        .dl-cards {
+          grid-template-columns: 1fr;
+        }
+        .dl-card.full {
+          grid-column: span 1;
+        }
+        h1 {
+          font-size: 38px;
+        }
+        .hero-left {
+          padding: 28px 24px;
+        }
+        .download {
+          padding: 28px 22px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Monet trail canvas + custom cursor -->
+    <canvas id="paint-canvas"></canvas>
+    <svg id="cursor" viewBox="0 0 40 40" aria-hidden="true">
+      <defs>
+        <radialGradient id="cg" cx="35%" cy="30%" r="70%">
+          <stop offset="0%" stop-color="#ffffff" stop-opacity=".9" />
+          <stop offset="35%" stop-color="#cad9ec" />
+          <stop offset="80%" stop-color="#4d6b94" />
+          <stop offset="100%" stop-color="#243a5c" />
+        </radialGradient>
+      </defs>
+      <circle cx="20" cy="20" r="9" fill="url(#cg)" opacity=".95" />
+      <circle
+        cx="20"
+        cy="20"
+        r="13"
+        fill="none"
+        stroke="#9d8bb2"
+        stroke-opacity=".5"
+        stroke-width=".8"
+      />
+    </svg>
+
+    <div class="wrap">
+      <!-- chrome -->
+      <nav class="chrome">
+        <div class="left">
+          <span class="logo-dot"></span>
+          <span class="brand">Joey Prompthub <small>桌面提示词器</small></span>
+        </div>
+        <div class="nav">
+          <a class="pill on" href="#home">首页</a>
+          <a class="pill" href="#features">功能</a>
+          <a class="pill" href="#download">下载</a>
+          <a class="pill" href="#faq">FAQ</a>
+          <a
+            class="pill"
+            href="https://github.com/Joey-233/Joey-Prompthub"
+            target="_blank"
+            rel="noopener noreferrer"
+            >GitHub ↗</a
+          >
+        </div>
+      </nav>
+
+      <!-- hero -->
+      <section class="hero" id="home">
+        <div class="hero-left">
+          <span class="eyebrow"><span data-app-version>v0.3.0</span> · LOCAL · OPEN SOURCE</span>
+          <h1>悬浮于桌面的<br /><span class="accent">提示词工坊</span>。</h1>
+          <p class="lead">
+            一颗常驻桌面的悬浮球，<b>瞬间收录灵感</b>、<b>分类管理</b>所有提示词， 还能用自选文字
+            API 优化提示词、编辑 Seedance 2 分镜模板。数据默认留在本机。
+          </p>
+          <div class="cta-row">
+            <a class="btn" href="#download"> 免费下载 <span class="arrow">→</span> </a>
+            <a class="btn ghost" href="#features">查看功能</a>
+            <div class="platforms">
+              <span><i></i>Windows</span>
+            </div>
+          </div>
+
+          <!-- hero 角落水彩渐变（纯 CSS 多色径向叠加 + 强模糊） -->
+          <div class="hero-art" aria-hidden="true"></div>
+        </div>
+
+        <div class="preview" aria-hidden="true">
+          <div class="preview-head">
+            <div class="traffic"><span></span><span></span><span></span></div>
+            <span>提示词库 · 14 条</span>
+          </div>
+          <div class="mini-search">搜索标题或内容…</div>
+          <div class="mini-tags">
+            <span class="tag b">全部</span>
+            <span class="tag">绘图</span>
+            <span class="tag">LLM</span>
+            <span class="tag">人设</span>
+            <span class="tag">GPT</span>
+          </div>
+          <div class="cards">
+            <div class="card">
+              <div>3:4 比例，简版画风格，手绘速写质感，线条粗糙有颗粒感…</div>
+              <div class="meta"><span class="tg">绘图</span><span>使用 3 次</span></div>
+            </div>
+            <div class="card b">
+              <div>生成面部特征以及全身三视图，最左侧占满三分之一的位置是…</div>
+              <div class="meta"><span class="tg">人设</span><span>5 天前</span></div>
+            </div>
+            <div class="card">
+              <div>基于此角色和背景，请制作一份类似官方设定资料的横版角色设定图…</div>
+              <div class="meta"><span class="tg">GPT</span><span>已收藏</span></div>
+            </div>
+            <div class="card">
+              <div>清晨薄雾中的睡莲池塘，柔和光线，印象派笔触，色彩层叠…</div>
+              <div class="meta"><span class="tg">绘图</span><span>尚未使用</span></div>
+            </div>
+          </div>
+          <div class="ball"></div>
+        </div>
+      </section>
+
+      <!-- features -->
+      <section class="feats" id="features">
+        <div class="sec-head">
+          <h2>把灵感收进口袋里。</h2>
+          <span class="kicker">FEATURES · 06</span>
+        </div>
+        <div class="feat-grid">
+          <div class="feat">
+            <span class="swatch"></span>
+            <span class="num">01</span>
+            <h3>悬浮球入口</h3>
+            <p>
+              常驻桌面最上层，单击展菜单，双击直达主面板，长按拖到任意位置。不抢镜，但始终待命。
+            </p>
+          </div>
+          <div class="feat">
+            <span class="swatch"></span>
+            <span class="num">02</span>
+            <h3>快速收录</h3>
+            <p>主面板输入框 / 剪贴板一键导入，Ctrl+Enter 立刻入库，灵感永不流失。</p>
+          </div>
+          <div class="feat">
+            <span class="swatch"></span>
+            <span class="num">03</span>
+            <h3>分类与标签</h3>
+            <p>绘图 / LLM 双类型，逗号分隔的自定义标签，关键词搜索，井井有条。</p>
+          </div>
+          <div class="feat">
+            <span class="swatch"></span>
+            <span class="num">04</span>
+            <h3>AI 优化</h3>
+            <p>
+              通过豆包、DeepSeek 或自定义 OpenAI 兼容接口，增强细节、精简表达或执行自定义优化指令。
+            </p>
+          </div>
+          <div class="feat">
+            <span class="swatch"></span>
+            <span class="num">05</span>
+            <h3>Seedance 2 模板</h3>
+            <p>
+              内置七分区“默认模板1”，自由组织角色与素材锚定、镜头序列、台词和风格，也可自定义默认模板。
+            </p>
+          </div>
+          <div class="feat">
+            <span class="swatch"></span>
+            <span class="num">06</span>
+            <h3>本地优先</h3>
+            <p>
+              SQLite 本地数据库，API Key 经 Electron safeStorage 加密；无法安全加密时拒绝明文保存。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- how -->
+      <section class="how">
+        <div class="step">
+          <span class="n">01</span>
+          <h4>记下灵感</h4>
+          <p>看到好提示词复制；单击悬浮球，选择「收录剪贴板文本」，内容立即入库。</p>
+        </div>
+        <div class="step">
+          <span class="n">02</span>
+          <h4>整理与优化</h4>
+          <p>双击悬浮球打开主面板。打标签、加备注，或交给 AI 优化按钮润色。</p>
+        </div>
+        <div class="step">
+          <span class="n">03</span>
+          <h4>编排成片提示</h4>
+          <p>进入 Seedance 2，组织参考素材与镜头序列，实时预览并复制完整提示词。</p>
+        </div>
+      </section>
+
+      <!-- download -->
+      <section class="download" id="download">
+        <svg
+          class="deco"
+          viewBox="0 0 1200 400"
+          preserveAspectRatio="xMidYMid slice"
+          aria-hidden="true"
+        >
+          <g opacity=".5">
+            <ellipse cx="120" cy="60" rx="220" ry="55" fill="#cad9ec" />
+            <ellipse cx="1080" cy="340" rx="260" ry="60" fill="#9d8bb2" fill-opacity=".5" />
+            <ellipse cx="980" cy="80" rx="140" ry="36" fill="#d9b25c" fill-opacity=".55" />
+            <ellipse cx="220" cy="340" rx="180" ry="40" fill="#8fa67a" fill-opacity=".45" />
+          </g>
+        </svg>
+        <div class="dl-inner">
+          <div class="dl-left">
+            <span class="eyebrow">FREE · OPEN SOURCE · MIT</span>
+            <h2>免费下载，<em>无内购</em>，<br />数据永远是你自己的。</h2>
+            <p>
+              Joey Prompthub 是完全免费的开源软件。安装包约 100MB，桌面占用极低，开机自启可选。
+              全新安装包含 4 条起始提示词和“默认模板1”，当前正式支持 Windows 10+。
+            </p>
+            <div class="dl-meta">
+              <span
+                ><b data-app-version>v0.3.0</b> ·
+                <time data-release-date datetime="2026-07-27">2026-07-27</time></span
+              >
+              <span>正式发行附 SHA256</span>
+              <span>License · MIT</span>
+            </div>
+          </div>
+          <div class="dl-cards">
+            <div class="dl-card">
+              <div class="os">Win</div>
+              <h4>Windows</h4>
+              <div class="sz" id="windows-release-size">.exe · x64 · 正在检查最新版</div>
+              <div class="release-status" id="windows-release-status" role="status">
+                正在读取 GitHub 最新正式版…
+              </div>
+              <button
+                class="dl-btn"
+                id="windows-download"
+                data-platform="Windows"
+                data-url="https://github.com/Joey-233/Joey-Prompthub/releases/latest"
+                onclick="startDownload(this)"
+              >
+                获取最新正式版 <span>↓</span>
+              </button>
+            </div>
+            <div class="dl-card full">
+              <div class="os" style="background: #e7dec8">src</div>
+              <h4>源代码</h4>
+              <div class="sz">GitHub · MIT License</div>
+              <div
+                class="src-pitch"
+                style="
+                  margin: 6px 0 14px;
+                  font-size: 13px;
+                  line-height: 1.6;
+                  color: rgba(60, 60, 60, 0.72);
+                  letter-spacing: 0.02em;
+                "
+              >
+                ⭐ 如果 Joey Prompthub 帮到你，欢迎去 GitHub 点个Star✨
+              </div>
+              <a
+                class="dl-btn alt"
+                href="https://github.com/Joey-233/Joey-Prompthub"
+                target="_blank"
+                rel="noopener noreferrer"
+                style="
+                  text-decoration: none;
+                  display: inline-flex;
+                  align-items: center;
+                  justify-content: center;
+                "
+                >查看仓库 · 顺手 Star ⭐</a
+              >
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- FAQ -->
+      <section class="faq" id="faq">
+        <div class="sec-head" style="margin-bottom: 6px">
+          <h2>常见问题</h2>
+          <span class="kicker">FAQ</span>
+        </div>
+        <details open>
+          <summary>完全免费吗？<span class="plus">+</span></summary>
+          <p>是的，Joey Prompthub 完全免费、开源，没有任何内购或付费功能。MIT 协议允许商业使用。</p>
+        </details>
+        <details>
+          <summary>我的提示词存在哪里？会上传云端吗？<span class="plus">+</span></summary>
+          <p>
+            提示词和模板默认保存在本地 SQLite 数据库。只有你主动使用 AI
+            优化或识图时，相关内容才会发送到你选择的服务商。
+          </p>
+        </details>
+        <details>
+          <summary>API Key 安全吗？<span class="plus">+</span></summary>
+          <p>使用 Electron 提供的 safeStorage 加密存储，只能在你的当前用户账户下解密读取。</p>
+        </details>
+        <details>
+          <summary>支持哪些文字 API？<span class="plus">+</span></summary>
+          <p>
+            内置豆包和 DeepSeek 官方地址，也可以填写任意 OpenAI Chat Completions
+            兼容地址、模型和自己的 API Key。
+          </p>
+        </details>
+        <details>
+          <summary>遇到问题、想反馈 bug 或建议怎么联系？<span class="plus">+</span></summary>
+          <p>
+            欢迎随时联系作者 Joey：<br />
+            · 微信：<b>15618674980</b>（请备注「Joey Prompthub」）<br />
+            · 邮箱：<a href="mailto:15618674980@163.com">15618674980@163.com</a><br />
+            · GitHub Issues：<a
+              href="https://github.com/Joey-233/Joey-Prompthub/issues"
+              target="_blank"
+              rel="noopener noreferrer"
+              >github.com/Joey-233/Joey-Prompthub/issues</a
+            >
+          </p>
+        </details>
+      </section>
+
+      <footer>
+        <div>
+          <a
+            href="https://joeystudio.art"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="color: inherit; text-decoration: none"
+            >joeystudio.art</a
+          >
+          · 莫奈丽莎AI工作室出品
+        </div>
+        <div class="links">
+          <a href="uploads/README.md">文档</a>
+          <a href="uploads/更新日志.md">更新日志</a>
+          <a
+            href="https://github.com/Joey-233/Joey-Prompthub"
+            target="_blank"
+            rel="noopener noreferrer"
+            >GitHub</a
+          >
+          <a
+            href="https://github.com/Joey-233/Joey-Prompthub/issues"
+            target="_blank"
+            rel="noopener noreferrer"
+            >反馈</a
+          >
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      /* ===== Custom Monet cursor + oil paint trail ===== */
+      ;(function () {
+        const cur = document.getElementById('cursor')
+        const cvs = document.getElementById('paint-canvas')
+        const ctx = cvs.getContext('2d')
+        let W = 0,
+          H = 0,
+          dpr = Math.min(2, window.devicePixelRatio || 1)
+
+        function resize() {
+          W = window.innerWidth
+          H = window.innerHeight
+          cvs.width = W * dpr
+          cvs.height = H * dpr
+          cvs.style.width = W + 'px'
+          cvs.style.height = H + 'px'
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+        }
+        resize()
+        window.addEventListener('resize', resize)
+
+        // Monet-inspired palette: water-lily blues, lilac, ochre, mossy green, rose, sun
+        const palette = [
+          [202, 217, 236, 0.55], // sky blue
+          [157, 139, 178, 0.45], // lilac
+          [217, 178, 92, 0.4], // ochre
+          [143, 166, 122, 0.42], // moss
+          [201, 138, 134, 0.42], // rose
+          [77, 107, 148, 0.35], // deep blue
+          [232, 222, 200, 0.5] // cream highlight
+        ]
+
+        let mx = W / 2,
+          my = H / 2,
+          lx = mx,
+          ly = my,
+          dx = 0,
+          dy = 0
+        let pressed = false
+
+        window.addEventListener('mousemove', (e) => {
+          mx = e.clientX
+          my = e.clientY
+          cur.style.transform = `translate(${mx}px,${my}px) translate(-50%,-50%)`
+        })
+        window.addEventListener('mousedown', () => {
+          pressed = true
+          cur.style.transform += ' scale(1.4)'
+        })
+        window.addEventListener('mouseup', () => {
+          pressed = false
+        })
+
+        // Fade trail slowly so daubs linger then dissolve like wet paint
+        function fade() {
+          ctx.globalCompositeOperation = 'destination-out'
+          ctx.fillStyle = 'rgba(0,0,0,0.012)'
+          ctx.fillRect(0, 0, W, H)
+          ctx.globalCompositeOperation = 'source-over'
+        }
+
+        function daub(x, y, vx, vy) {
+          const speed = Math.hypot(vx, vy)
+          const n = pressed ? 6 : speed > 2 ? 3 : 2
+          for (let i = 0; i < n; i++) {
+            const c = palette[(Math.random() * palette.length) | 0]
+            const r = (pressed ? 14 : 9) + Math.random() * 10 + speed * 0.4
+            const ang = Math.atan2(vy, vx) + (Math.random() - 0.5) * 0.9
+            const len = r * (1.4 + Math.random() * 1.2)
+            const ox = (Math.random() - 0.5) * 18
+            const oy = (Math.random() - 0.5) * 18
+            ctx.save()
+            ctx.translate(x + ox, y + oy)
+            ctx.rotate(ang)
+            const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, len)
+            grad.addColorStop(0, `rgba(${c[0]},${c[1]},${c[2]},${c[3]})`)
+            grad.addColorStop(0.6, `rgba(${c[0]},${c[1]},${c[2]},${c[3] * 0.5})`)
+            grad.addColorStop(1, `rgba(${c[0]},${c[1]},${c[2]},0)`)
+            ctx.fillStyle = grad
+            ctx.beginPath()
+            ctx.ellipse(0, 0, len, r * 0.55, 0, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.restore()
+          }
+        }
+
+        function loop() {
+          dx = mx - lx
+          dy = my - ly
+          const d = Math.hypot(dx, dy)
+          if (d > 1) {
+            // interpolate so brush keeps continuous
+            const steps = Math.min(8, Math.ceil(d / 8))
+            for (let s = 1; s <= steps; s++) {
+              const x = lx + dx * (s / steps)
+              const y = ly + dy * (s / steps)
+              daub(x, y, dx, dy)
+            }
+          }
+          fade()
+          lx = mx
+          ly = my
+          requestAnimationFrame(loop)
+        }
+        loop()
+
+        // hide cursor when leaving window
+        document.addEventListener('mouseleave', () => (cur.style.opacity = 0))
+        document.addEventListener('mouseenter', () => (cur.style.opacity = 1))
+      })()
+
+      /* 轻量下载反馈 */
+      ;(function () {
+        const style = document.createElement('style')
+        style.textContent = `
     #ph-toast{position:fixed;left:50%;top:24px;transform:translate(-50%,-12px);
       background:#1a1c1f;color:#fbf8f1;padding:12px 18px;border-radius:14px;
       font-size:14px;line-height:1.5;box-shadow:0 12px 40px rgba(26,28,31,.28);
@@ -639,102 +1263,158 @@
       z-index:200;font-family:"Noto Sans SC",sans-serif;max-width:90vw;text-align:center}
     #ph-toast.on{opacity:1;transform:translate(-50%,0)}
     #ph-toast b{color:#cad9ec;font-weight:600}
-  `;
-  document.head.appendChild(style);
-  const toast = document.createElement('div');
-  toast.id = 'ph-toast';
-  document.body.appendChild(toast);
-  let timer;
-  window.__phToast = function(msg){
-    toast.innerHTML = msg;
-    toast.classList.add('on');
-    clearTimeout(timer);
-    timer = setTimeout(()=>toast.classList.remove('on'), 2600);
-  };
-})();
+  `
+        document.head.appendChild(style)
+        const toast = document.createElement('div')
+        toast.id = 'ph-toast'
+        document.body.appendChild(toast)
+        let timer
+        window.__phToast = function (msg) {
+          toast.innerHTML = msg
+          toast.classList.add('on')
+          clearTimeout(timer)
+          timer = setTimeout(() => toast.classList.remove('on'), 2600)
+        }
+      })()
 
-function ping(btn,name){
-  const messages = {
-    Windows: '<b>Windows 客户端</b>即将上线，敬请期待 ☕',
-    macOS:   '<b>macOS 客户端</b>即将上线，敬请期待 ☕',
-    Source:  '源代码仓库即将开放 ✦'
-  };
-  window.__phToast(messages[name] || '即将上线，敬请期待');
-}
+      /* ===== Download with 30s per-platform cooldown ===== */
+      const DOWNLOAD_COOLDOWN_MS = 30000
+      const DOWNLOAD_STORAGE_KEY = 'ph_dl_cooldown'
 
-/* ===== Download with 30s per-platform cooldown ===== */
-const DOWNLOAD_COOLDOWN_MS = 30000;
-const DOWNLOAD_STORAGE_KEY = 'ph_dl_cooldown';
+      function readCooldownMap() {
+        try {
+          return JSON.parse(localStorage.getItem(DOWNLOAD_STORAGE_KEY) || '{}')
+        } catch {
+          return {}
+        }
+      }
 
-function readCooldownMap() {
-  try { return JSON.parse(localStorage.getItem(DOWNLOAD_STORAGE_KEY) || '{}'); }
-  catch { return {}; }
-}
+      function writeCooldownMap(map) {
+        try {
+          localStorage.setItem(DOWNLOAD_STORAGE_KEY, JSON.stringify(map))
+        } catch {}
+      }
 
-function writeCooldownMap(map) {
-  try { localStorage.setItem(DOWNLOAD_STORAGE_KEY, JSON.stringify(map)); } catch {}
-}
+      function applyCooldownUI(btn, remainingMs) {
+        const original = btn.dataset.originalLabel || btn.innerHTML
+        btn.dataset.originalLabel = original
+        btn.disabled = true
+        btn.style.opacity = '0.55'
+        btn.style.cursor = 'not-allowed'
+        let secs = Math.ceil(remainingMs / 1000)
+        btn.innerHTML = `冷却中 ${secs}s`
+        const timer = setInterval(() => {
+          secs -= 1
+          if (secs <= 0) {
+            clearInterval(timer)
+            btn.innerHTML = original
+            btn.disabled = false
+            btn.style.opacity = ''
+            btn.style.cursor = ''
+          } else {
+            btn.innerHTML = `冷却中 ${secs}s`
+          }
+        }, 1000)
+      }
 
-function applyCooldownUI(btn, remainingMs) {
-  const original = btn.dataset.originalLabel || btn.innerHTML;
-  btn.dataset.originalLabel = original;
-  btn.disabled = true;
-  btn.style.opacity = '0.55';
-  btn.style.cursor = 'not-allowed';
-  let secs = Math.ceil(remainingMs / 1000);
-  btn.innerHTML = `冷却中 ${secs}s`;
-  const timer = setInterval(() => {
-    secs -= 1;
-    if (secs <= 0) {
-      clearInterval(timer);
-      btn.innerHTML = original;
-      btn.disabled = false;
-      btn.style.opacity = '';
-      btn.style.cursor = '';
-    } else {
-      btn.innerHTML = `冷却中 ${secs}s`;
-    }
-  }, 1000);
-}
+      function startDownload(btn) {
+        const name = btn.dataset.platform || 'Download'
+        const url = btn.dataset.url
+        if (!url) {
+          window.__phToast('下载链接配置错误')
+          return
+        }
+        const map = readCooldownMap()
+        const now = Date.now()
+        const last = map[name] || 0
+        const remainingMs = DOWNLOAD_COOLDOWN_MS - (now - last)
+        if (remainingMs > 0) {
+          const secs = Math.ceil(remainingMs / 1000)
+          window.__phToast(`<b>${name}</b> 下载冷却中，剩 ${secs}s 后再试 ☕`)
+          return
+        }
+        map[name] = now
+        writeCooldownMap(map)
 
-function startDownload(btn) {
-  const name = btn.dataset.platform || 'Download';
-  const url = btn.dataset.url;
-  if (!url) {
-    window.__phToast('下载链接配置错误');
-    return;
-  }
-  const map = readCooldownMap();
-  const now = Date.now();
-  const last = map[name] || 0;
-  const remainingMs = DOWNLOAD_COOLDOWN_MS - (now - last);
-  if (remainingMs > 0) {
-    const secs = Math.ceil(remainingMs / 1000);
-    window.__phToast(`<b>${name}</b> 下载冷却中，剩 ${secs}s 后再试 ☕`);
-    return;
-  }
-  map[name] = now;
-  writeCooldownMap(map);
+        const a = document.createElement('a')
+        a.href = url
+        a.style.display = 'none'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
 
-  const a = document.createElement('a');
-  a.href = url;
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+        window.__phToast(`<b>${name}</b> 下载已开始 ✓ 请到浏览器下载列表查看`)
+        applyCooldownUI(btn, DOWNLOAD_COOLDOWN_MS)
+      }
 
-  window.__phToast(`<b>${name}</b> 下载已开始 ✓ 请到浏览器下载列表查看`);
-  applyCooldownUI(btn, DOWNLOAD_COOLDOWN_MS);
-}
+      /* ===== GitHub 最新正式版：自动更新版本、大小与安装包直链 ===== */
+      const GITHUB_LATEST_RELEASE_API =
+        'https://api.github.com/repos/Joey-233/Joey-Prompthub/releases/latest'
 
-/* 页面加载时若 localStorage 里还有未过期的冷却，恢复 UI 状态 */
-document.querySelectorAll('button[data-platform][data-url]').forEach((btn) => {
-  const name = btn.dataset.platform;
-  const map = readCooldownMap();
-  const last = map[name] || 0;
-  const remainingMs = DOWNLOAD_COOLDOWN_MS - (Date.now() - last);
-  if (remainingMs > 0) applyCooldownUI(btn, remainingMs);
-});
-</script>
-</body>
+      function formatReleaseBytes(bytes) {
+        if (!Number.isFinite(bytes) || bytes <= 0) return ''
+        return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+      }
+
+      async function refreshLatestRelease() {
+        const btn = document.getElementById('windows-download')
+        const status = document.getElementById('windows-release-status')
+        const size = document.getElementById('windows-release-size')
+        if (!btn || !status || !size) return
+
+        try {
+          const response = await fetch(GITHUB_LATEST_RELEASE_API, {
+            headers: { Accept: 'application/vnd.github+json' }
+          })
+          if (!response.ok) throw new Error(`GitHub API ${response.status}`)
+          const release = await response.json()
+          const asset = (release.assets || []).find((item) =>
+            /Joey[ -]Prompthub.*Setup-x64\.exe$/i.test(item.name || '')
+          )
+          if (!asset?.browser_download_url)
+            throw new Error('最新 Release 未包含 Windows x64 安装包')
+
+          const version = String(release.tag_name || '').replace(/^v/i, '') || '未知版本'
+          const date = release.published_at
+            ? new Intl.DateTimeFormat('zh-CN', {
+                timeZone: 'Asia/Shanghai',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+              }).format(new Date(release.published_at))
+            : ''
+
+          btn.dataset.url = asset.browser_download_url
+          btn.dataset.originalLabel = `下载 v${version} <span>↓</span>`
+          if (!btn.disabled) btn.innerHTML = btn.dataset.originalLabel
+          size.textContent = `.exe · ${formatReleaseBytes(asset.size)} · x64`
+          status.textContent = `最新正式版 v${version}${date ? ` · ${date}` : ''}`
+          status.dataset.state = 'ready'
+          document.querySelectorAll('[data-app-version]').forEach((node) => {
+            node.textContent = `v${version}`
+          })
+          if (date) {
+            document.querySelectorAll('[data-release-date]').forEach((node) => {
+              node.textContent = date
+              node.setAttribute('datetime', release.published_at.slice(0, 10))
+            })
+          }
+        } catch {
+          status.textContent = '暂时无法读取版本信息，点击后可前往 GitHub Releases 获取最新版。'
+          status.dataset.state = 'error'
+          size.textContent = '.exe · x64 · GitHub Releases'
+        }
+      }
+
+      /* 页面加载时若 localStorage 里还有未过期的冷却，恢复 UI 状态 */
+      document.querySelectorAll('button[data-platform][data-url]').forEach((btn) => {
+        const name = btn.dataset.platform
+        const map = readCooldownMap()
+        const last = map[name] || 0
+        const remainingMs = DOWNLOAD_COOLDOWN_MS - (Date.now() - last)
+        if (remainingMs > 0) applyCooldownUI(btn, remainingMs)
+      })
+      void refreshLatestRelease()
+    </script>
+  </body>
 </html>

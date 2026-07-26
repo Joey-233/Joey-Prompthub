@@ -1,10 +1,6 @@
 import type { PromptRecord, UpdatePromptInput } from './types'
 
-export type LibrarySortMode =
-  | 'default'
-  | 'recent-used'
-  | 'favorites'
-  | 'recent-generated'
+export type LibrarySortMode = 'default' | 'recent-used' | 'favorites' | 'recent-generated'
 
 export function buildUsagePatch(
   prompt: Pick<PromptRecord, 'useCount'>,
@@ -42,8 +38,7 @@ export function sortPrompts(prompts: PromptRecord[], sortMode: LibrarySortMode) 
 
   if (sortMode === 'recent-generated') {
     return items.sort(
-      (left, right) =>
-        timestampValue(right.lastGeneratedAt) - timestampValue(left.lastGeneratedAt)
+      (left, right) => timestampValue(right.lastGeneratedAt) - timestampValue(left.lastGeneratedAt)
     )
   }
 

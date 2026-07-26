@@ -1,10 +1,16 @@
-import { useEffect, useRef, useState, type ChangeEvent, type SetStateAction } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ClipboardEvent as ReactClipboardEvent,
+  type SetStateAction
+} from 'react'
 
-import { IMAGE_TAG, type PromptRecord } from '../../shared/types'
+import type { PromptRecord } from '../../shared/types'
 import { useDebouncedEffect } from '../../hooks/useDebouncedEffect'
 import { readImageFileAsDataUrl } from '../../lib/imageFile'
 import { buildUsagePatch } from '../../shared/promptActivity'
-import { useAppStore } from '../../stores/appStore'
 import { usePromptStore } from '../../stores/promptStore'
 import { OptimizePromptDialog } from './OptimizePromptDialog'
 
@@ -16,18 +22,21 @@ function getImages(prompt: PromptRecord): string[] {
   return []
 }
 
-function buildDraftPatch(draft: PromptRecord) {
-  return {
-    content: draft.content,
-    notes: draft.notes,
-    tags: draft.tags,
-    params: draft.params,
-    previewImages: getImages(draft)
-  }
+function normalizeTags(value: string) {
+  return [
+    ...new Set(
+      value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .map((item) => item.slice(0, 40))
+    )
+  ].slice(0, 20)
 }
 
 function hasDraftChanges(draft: PromptRecord, source: PromptRecord) {
   return (
+    draft.title !== source.title ||
     draft.content !== source.content ||
     draft.notes !== source.notes ||
     JSON.stringify(getImages(draft)) !== JSON.stringify(getImages(source)) ||
@@ -43,12 +52,13 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
   const saveDurableDraft = usePromptStore((state) => state.saveDraft)
   const deletePrompt = usePromptStore((state) => state.deletePrompt)
   const toggleFavorite = usePromptStore((state) => state.toggleFavorite)
-  const openTestBench = useAppStore((state) => state.openTestBench)
   const initialDraft = durableDraft?.prompt ?? prompt
   const [draft, setDraft] = useState(initialDraft)
   const [showOptimizeDialog, setShowOptimizeDialog] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [previewError, setPreviewError] = useState('')
+  const [actionStatus, setActionStatus] = useState('')
+  const [actionPending, setActionPending] = useState(false)
   const saveStatus = durableDraft?.status ?? 'saved'
   const previewInputRef = useRef<HTMLInputElement | null>(null)
   const dirtyRef = useRef(false)
@@ -63,7 +73,10 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
   const [tagsInput, setTagsInput] = useState(() => initialDraft.tags.join(', '))
 
   const pendingDraftRef = useRef(draft)
-  pendingDraftRef.current = draft
+
+  useEffect(() => {
+    pendingDraftRef.current = draft
+  }, [draft])
   function updateDraft(action: SetStateAction<PromptRecord>) {
     dirtyRef.current = true
     const next = typeof action === 'function' ? action(pendingDraftRef.current) : action
@@ -76,10 +89,13 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
     return () => {
       const d = pendingDraftRef.current
       if (hasDraftChanges(d, prompt)) {
-        void usePromptStore.getState().saveDraft(d.id).catch(() => undefined)
+        void usePromptStore
+          .getState()
+          .saveDraft(d.id)
+          .catch(() => undefined)
       }
     }
-  }, [prompt.id])
+  }, [prompt])
 
   useEffect(() => {
     const switchedPrompt = sourcePromptRef.current.id !== prompt.id
@@ -95,6 +111,8 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
     if (switchedPrompt) {
       setConfirmDelete(false)
       setPreviewError('')
+      setActionStatus('')
+      setActionPending(false)
     }
   }, [prompt])
 
@@ -102,28 +120,65 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
     return saveDurableDraft(id).catch(() => undefined)
   }
 
-  // Ctrl+V 粘贴图片：从剪贴板抓 image/* 项加入预览
-  useEffect(() => {
-    function onPaste(e: ClipboardEvent) {
-      const items = e.clipboardData?.items
-      if (!items) return
-      const files: File[] = []
-      for (let i = 0; i < items.length; i++) {
-        const it = items[i]
-        if (it.kind === 'file' && it.type.startsWith('image/')) {
-          const f = it.getAsFile()
-          if (f) files.push(f)
-        }
-      }
-      if (files.length > 0) {
-        e.preventDefault()
-        void appendPreviewFiles(files)
-      }
+  async function handleCopy() {
+    setActionStatus('')
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable')
+      await navigator.clipboard.writeText(draft.content)
+    } catch {
+      setActionStatus('复制失败，请检查系统剪贴板权限')
+      return
     }
-    window.addEventListener('paste', onPaste)
-    return () => window.removeEventListener('paste', onPaste)
-    // appendPreviewFiles 读 draft（用最新闭包就好），重订阅成本低
-  }, [draft])
+
+    const timestamp = new Date().toISOString()
+    const patch = buildUsagePatch(draft, timestamp)
+    setDraft((current) => ({ ...current, ...patch }))
+    try {
+      await updatePrompt(draft.id, patch)
+      setActionStatus('已复制')
+    } catch {
+      setActionStatus('已复制，但使用次数同步失败')
+    }
+  }
+
+  async function handleFavorite() {
+    if (actionPending) return
+    const previous = draft.isFavorite
+    setActionPending(true)
+    setActionStatus('')
+    setDraft((current) => ({ ...current, isFavorite: !previous }))
+    try {
+      await toggleFavorite(draft)
+    } catch {
+      setDraft((current) => ({ ...current, isFavorite: previous }))
+      setActionStatus('收藏状态保存失败')
+    } finally {
+      setActionPending(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (actionPending) return
+    setActionPending(true)
+    setActionStatus('')
+    try {
+      await deletePrompt(draft.id)
+    } catch {
+      setActionStatus('删除失败，请重试')
+      setActionPending(false)
+    }
+  }
+
+  function handlePaste(event: ReactClipboardEvent<HTMLElement>) {
+    const files = [...event.clipboardData.items]
+      .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file))
+    if (files.length > 0) {
+      event.preventDefault()
+      void appendPreviewFiles(files)
+    }
+  }
 
   function handleDropFiles(e: React.DragEvent) {
     e.preventDefault()
@@ -149,9 +204,7 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
 
     try {
       const dataUrls = await Promise.all(
-        accepted.map((file) =>
-          readImageFileAsDataUrl(file, { maxDimension: 512, quality: 0.8 })
-        )
+        accepted.map((file) => readImageFileAsDataUrl(file, { maxDimension: 512, quality: 0.8 }))
       )
       const next = [...current, ...dataUrls].slice(0, MAX_PREVIEW_IMAGES)
       updateDraft((c) => ({ ...c, previewImages: next, previewImage: next[0] ?? '' }))
@@ -189,15 +242,31 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
   )
 
   return (
-    <aside className="editor-panel">
+    <aside className="editor-panel" onPaste={handlePaste}>
       <header className="editor-heading">
         <h2>提示词详情</h2>
         <span className="editor-save-status" role="status" data-status={saveStatus}>
           {saveStatus === 'saving' ? '保存中…' : saveStatus === 'error' ? '保存失败' : '已保存'}
         </span>
-        {saveStatus === 'error' && durableDraft ? <button className="editor-retry" type="button" onClick={() => void savePatch(prompt.id)}>重试</button> : null}
+        {saveStatus === 'error' && durableDraft ? (
+          <button className="editor-retry" type="button" onClick={() => void savePatch(prompt.id)}>
+            重试
+          </button>
+        ) : null}
       </header>
       <div className="editor-fields">
+        <label className="field">
+          <span className="field-label">标题</span>
+          <input
+            aria-label="标题"
+            className="field-input"
+            maxLength={200}
+            value={draft.title}
+            onChange={(event) =>
+              updateDraft((current) => ({ ...current, title: event.target.value }))
+            }
+          />
+        </label>
         <label className="field editor-primary-field">
           <span className="field-label">提示词内容</span>
           <textarea
@@ -213,7 +282,9 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
         <details className="editor-section">
           <summary>
             <span>标签</span>
-            <span className="editor-section-summary">{draft.tags.length > 0 ? `${draft.tags.length} 个` : '未添加'}</span>
+            <span className="editor-section-summary">
+              {draft.tags.length > 0 ? `${draft.tags.length} 个` : '未添加'}
+            </span>
           </summary>
           <label className="field">
             <span className="field-label">标签（逗号分隔）</span>
@@ -225,10 +296,7 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
                 setTagsInput(raw)
                 updateDraft((current) => ({
                   ...current,
-                  tags: raw
-                    .split(',')
-                    .map((item) => item.trim())
-                    .filter(Boolean)
+                  tags: normalizeTags(raw)
                 }))
               }}
             />
@@ -238,7 +306,9 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
         <details className="editor-section">
           <summary>
             <span>备注</span>
-            <span className="editor-section-summary">{draft.notes ? draft.notes.split('\n')[0] : '未添加'}</span>
+            <span className="editor-section-summary">
+              {draft.notes ? draft.notes.split('\n')[0] : '未添加'}
+            </span>
           </summary>
           <label className="field">
             <span className="field-label">备注</span>
@@ -257,7 +327,9 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
         <details className="editor-section">
           <summary>
             <span>预览图</span>
-            <span className="editor-section-summary">{getImages(draft).length > 0 ? `${getImages(draft).length} 张` : '未添加'}</span>
+            <span className="editor-section-summary">
+              {getImages(draft).length > 0 ? `${getImages(draft).length} 张` : '未添加'}
+            </span>
           </summary>
           <div className="field">
             <span className="field-label">
@@ -289,9 +361,7 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
                   title="点击上传 / Ctrl+V 粘贴 / 拖入图片"
                 >
                   <span className="editor-preview-slot-add-plus">+</span>
-                  <span className="editor-preview-slot-add-hint">
-                    上传 · 粘贴 · 拖入
-                  </span>
+                  <span className="editor-preview-slot-add-hint">上传 · 粘贴 · 拖入</span>
                 </button>
               )}
             </div>
@@ -310,72 +380,33 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
       </div>
 
       <div className="editor-actions">
-        <button
-          className="editor-action"
-          type="button"
-          onClick={() => {
-            if (navigator.clipboard) {
-              const timestamp = new Date().toISOString()
-              const patch = buildUsagePatch(draft, timestamp)
-              setDraft((current) => ({ ...current, ...patch }))
-              void updatePrompt(draft.id, patch).then(() =>
-                navigator.clipboard.writeText(draft.content)
-              )
-            }
-          }}
-        >
+        <button className="editor-action" type="button" onClick={() => void handleCopy()}>
           复制
         </button>
         <button
           aria-label={draft.isFavorite ? '取消收藏提示词' : '收藏提示词'}
           className="editor-action"
           data-active={draft.isFavorite}
+          disabled={actionPending}
           type="button"
-          onClick={() => {
-            setDraft((current) => ({ ...current, isFavorite: !current.isFavorite }))
-            void toggleFavorite(draft)
-          }}
+          onClick={() => void handleFavorite()}
         >
           {draft.isFavorite ? '取消收藏' : '收藏'}
         </button>
-        <button
-          className="editor-action"
-          type="button"
-          onClick={() => setShowOptimizeDialog(true)}
-        >
+        <button className="editor-action" type="button" onClick={() => setShowOptimizeDialog(true)}>
           AI 优化
         </button>
-        {draft.tags.includes(IMAGE_TAG) ? (
-          <button
-            className="editor-action editor-action-primary"
-            type="button"
-            onClick={() => {
-              const timestamp = new Date().toISOString()
-              const patch = {
-                ...buildDraftPatch(draft),
-                ...buildUsagePatch(draft, timestamp)
-              }
-              setDraft((current) => ({ ...current, ...patch }))
-              void updatePrompt(draft.id, patch).then(() => openTestBench(draft.id))
-            }}
-          >
-            发送到测试台
-          </button>
-        ) : null}
         {confirmDelete ? (
           <>
             <button
               className="editor-action editor-action-danger"
+              disabled={actionPending}
               type="button"
-              onClick={() => void deletePrompt(draft.id)}
+              onClick={() => void handleDelete()}
             >
-              确认删除
+              {actionPending ? '删除中…' : '确认删除'}
             </button>
-            <button
-              className="editor-action"
-              type="button"
-              onClick={() => setConfirmDelete(false)}
-            >
+            <button className="editor-action" type="button" onClick={() => setConfirmDelete(false)}>
               取消
             </button>
           </>
@@ -389,6 +420,14 @@ export function PromptEditor({ prompt }: { prompt: PromptRecord }) {
           </button>
         )}
       </div>
+      {actionStatus ? (
+        <p
+          className={actionStatus.includes('失败') ? 'field-hint field-hint-error' : 'field-hint'}
+          role="status"
+        >
+          {actionStatus}
+        </p>
+      ) : null}
 
       {showOptimizeDialog ? (
         <OptimizePromptDialog

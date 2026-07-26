@@ -1,14 +1,8 @@
-import type {
-  ImageGenerationInput,
-  ImageGenerationOutcome
-} from '../services/image/types'
-
 /**
  * "绘图" and "LLM" are reserved tag values that designate the primary
  * categorization of a prompt. They have no special storage — they live in the
- * regular `tags` array — but they get promoted UI treatment (chip toggles in
- * the capture form, prominent filter chips, gates the "send to test bench"
- * action).
+ * regular `tags` array — but they get promoted UI treatment in capture and
+ * filtering controls.
  */
 export const IMAGE_TAG = '绘图'
 export const LLM_TAG = 'LLM'
@@ -65,33 +59,95 @@ export interface UpdatePromptInput {
 
 export interface PromptFilter {
   search?: string
+  tag?: string | null
+  sort?: 'default' | 'recent-used' | 'favorites' | 'recent-generated'
+  limit?: number
+  offset?: number
+}
+
+export interface PromptPage {
+  items: PromptRecord[]
+  total: number
+  hasMore: boolean
 }
 
 export interface GenerationRecord {
   id: string
+  runId: string
   promptId: string | null
   providerId: string
   status: 'mocked' | 'success' | 'failed'
   promptTitleSnapshot: string
   promptSnapshot: string
   imageData: string
+  errorMessage: string
+  durationMs: number | null
   params: Record<string, unknown>
   createdAt: string
 }
 
 export interface CreateGenerationInput {
+  runId?: string
   promptId?: string | null
   providerId: string
   status: GenerationRecord['status']
   promptTitleSnapshot: string
   promptSnapshot: string
   imageData: string
+  errorMessage?: string
+  durationMs?: number | null
   params?: Record<string, unknown>
+}
+
+export interface CreateGenerationBatchInput {
+  runId?: string
+  records: CreateGenerationInput[]
+}
+
+export interface GenerationFilter {
+  promptId?: string | null
+  limit?: number
+  offset?: number
+}
+
+export interface GenerationPage {
+  items: GenerationRecord[]
+  total: number
+  hasMore: boolean
 }
 
 export interface AppSettingRecord {
   key: string
   value: unknown
+}
+
+export interface PromptHubBackupV1 {
+  format: 'prompthub-backup'
+  version: 1
+  exportedAt: string
+  prompts: PromptRecord[]
+  generations: GenerationRecord[]
+  settings: Record<string, unknown>
+  seedance2: {
+    templates: Seedance2TemplateRecord[]
+    presets: Seedance2PresetRecord[]
+  }
+  excludes: ['apiKeys']
+}
+
+export interface ImportPreview {
+  prompts: number
+  generations: number
+  templates: number
+  presets: number
+  conflicts: number
+}
+
+export interface StorageStats {
+  databaseBytes: number
+  assetsBytes: number
+  assetCount: number
+  totalBytes: number
 }
 
 export interface FloatingWindowState {
@@ -101,18 +157,13 @@ export interface FloatingWindowState {
   expanded: boolean
 }
 
-export interface MoveFloatingWindowInput {
-  x: number
-  y: number
-  snap?: boolean
-}
-
 export interface FloatingDragStartInput {
   cursorScreenX?: number
   cursorScreenY?: number
 }
 
 export interface AiOptimizeBridgeInput {
+  requestId?: string
   content: string
   direction: string
   customInstruction?: string
@@ -151,7 +202,7 @@ export interface Seedance2Segment {
 export type Seedance2TemplateSection =
   | { id: string; title: string; kind: 'text'; content: string }
   | { id: string; title: string; kind: 'references'; refGroups: Seedance2RefGroup[] }
-  | { id: string; title: string; kind: 'shots'; segments: Seedance2Segment[]; footer: string }
+  | { id: string; title: string; kind: 'shots'; segments: Seedance2Segment[] }
 
 export interface Seedance2TemplateData {
   sections: Seedance2TemplateSection[]
@@ -197,6 +248,7 @@ export interface Seedance2PresetInput {
 }
 
 export interface AiDescribeImageInput {
+  requestId?: string
   /** 图片 data URL（`data:image/...;base64,xxx`），由渲染层压缩后传入。 */
   imageDataUrl: string
   /** 识别指令；缺省时主进程使用默认的「反推绘图提示词」指令。 */
@@ -207,31 +259,32 @@ export interface AiDescribeImageInput {
 export interface PromptHubApi {
   prompts: {
     list: (filter?: PromptFilter) => Promise<PromptRecord[]>
+    listPage: (filter?: PromptFilter) => Promise<PromptPage>
+    get: (id: string) => Promise<PromptRecord | null>
     create: (input: CreatePromptInput) => Promise<PromptRecord>
     update: (id: string, patch: UpdatePromptInput) => Promise<PromptRecord>
     delete: (id: string) => Promise<void>
-  }
-  generations: {
-    list: () => Promise<GenerationRecord[]>
-    create: (input: CreateGenerationInput) => Promise<GenerationRecord>
   }
   settings: {
     list: () => Promise<Record<string, unknown>>
     set: (key: string, value: unknown) => Promise<void>
   }
+  data: {
+    exportBackup: () => Promise<PromptHubBackupV1>
+    previewImport: (backup: unknown) => Promise<ImportPreview>
+    importBackup: (backup: unknown, mode: 'merge' | 'replace') => Promise<ImportPreview>
+    storageStats: () => Promise<StorageStats>
+  }
   secure: {
     has: (key: string) => Promise<boolean>
     set: (key: string, value: string) => Promise<void>
     delete: (key: string) => Promise<void>
-    reveal: (key: string) => Promise<string | null>
   }
   ai: {
     optimize: (input: AiOptimizeBridgeInput) => Promise<string>
     describeImage: (input: AiDescribeImageInput) => Promise<string>
-  }
-  image: {
-    openaiGenerate: (input: ImageGenerationInput) => Promise<ImageGenerationOutcome>
-    sdWebuiGenerate: (input: ImageGenerationInput) => Promise<ImageGenerationOutcome>
+    checkConnection: (kind: 'ai') => Promise<{ message: string; models: string[] }>
+    cancelRequest: (requestId: string) => Promise<void>
   }
   seedance2: {
     listTemplates: () => Promise<Seedance2TemplateRecord[]>
@@ -247,12 +300,15 @@ export interface PromptHubApi {
     clipboardImport: () => Promise<PromptRecord | null>
     openMainWindow: () => Promise<void>
     setLaunchAtLogin: (enabled: boolean) => Promise<void>
+    setFloatingEnabled: (enabled: boolean) => Promise<void>
     quitApp: () => Promise<void>
-    getFloatingState: () => Promise<FloatingWindowState>
-    setFloatingExpanded: (expanded: boolean) => Promise<FloatingWindowState>
-    moveFloatingWindow: (input: MoveFloatingWindowInput) => Promise<FloatingWindowState>
-    floatingDragStart: (input: FloatingDragStartInput) => Promise<FloatingWindowState>
-    floatingDragEnd: (snap: boolean) => Promise<FloatingWindowState>
-    showFloatingContextMenu: () => Promise<void>
   }
+}
+
+export interface PromptHubFloatingApi {
+  getState: () => Promise<FloatingWindowState>
+  openMainWindow: () => Promise<void>
+  dragStart: (input: FloatingDragStartInput) => Promise<FloatingWindowState>
+  dragEnd: (snap: boolean) => Promise<FloatingWindowState>
+  showContextMenu: () => Promise<void>
 }

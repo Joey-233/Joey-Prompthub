@@ -1,0 +1,22 @@
+{
+  "appId": "art.joeystudio.prompthub",
+  "productName": "Joey Prompthub",
+  "copyright": "Copyright © 2026 Joey-233",
+  "asar": true,
+  "forceCodeSigning": false,
+  "directories": {
+    "output": "release-mac-dev",
+    "buildResources": "build"
+  },
+  "files": ["out/**/*", "!out/main/dbSmoke.js", "package.json"],
+  "asarUnpack": ["**/node_modules/better-sqlite3/**/*"],
+  "mac": {
+    "icon": "build/icon.icns",
+    "category": "public.app-category.productivity",
+    "target": ["dmg", "zip"],
+    "artifactName": "${productName}-${version}-macOS-dev-${arch}.${ext}",
+    "identity": null,
+    "hardenedRuntime": false,
+    "notarize": false
+  }
+}

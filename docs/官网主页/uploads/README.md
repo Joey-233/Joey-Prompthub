@@ -1,22 +1,21 @@
+# Joey Prompthub - 本地提示词管理器
 
-# Prompt Hub - 本地提示词管理器
-
-&gt; 悬浮球常驻桌面，快速收录，统一管理，接 API 出图测试。
+&gt; 悬浮球常驻桌面，快速收录、统一管理并优化提示词。
 
 ---
 
 ## 项目介绍
 
-**Prompt Hub** 是一款专为 AI 工作流设计的本地提示词管理工具，以优雅的悬浮球形态常驻桌面，让你可以瞬间收录灵感，有序管理所有提示词，并支持直接对接出图服务进行测试。
+**Joey Prompthub** 是一款专为 AI 工作流设计的本地提示词管理工具，以优雅的悬浮球形态常驻桌面，让你可以瞬间收录灵感并有序管理、检索和优化所有提示词。
 
 ### 核心特色
 
 - 🎈 **悬浮球入口** - 常驻桌面，单击即展菜单，双击打开主面板
-- 📥 **快速收录** - 支持迷你输入框、粘贴板一键导入，灵感永不流失
+- 📥 **快速收录** - 支持主面板输入与剪贴板一键导入，灵感永不流失
 - 📚 **分类管理** - 绘图 / LLM 双类型，标签 + 搜索，井井有条
-- ✨ **AI 优化** - 一键调用 Claude / OpenAI 让提示词更专业
-- 🎨 **出图测试** - 直接对接 SD WebUI / DALL·E 等服务，边试边改
-- 🔒 **隐私优先** - 数据全部本地 SQLite，不上传云端
+- ✨ **AI 优化** - 使用豆包、DeepSeek 或自定义 OpenAI 兼容接口
+- 🎬 **Seedance 2** - 编辑角色锚定、镜头序列与台词模板
+- 🔒 **隐私优先** - 数据默认保存在本地 SQLite；仅主动调用 AI 时发送必要内容
 
 ---
 
@@ -33,7 +32,7 @@
 
 ## 下载与安装
 
-Prompt Hub 完全免费，支持 Windows / macOS / Linux。
+Joey Prompthub 完全免费，当前正式支持 Windows。
 
 &gt; 下载页面即将上线...
 
@@ -41,7 +40,7 @@ Prompt Hub 完全免费，支持 Windows / macOS / Linux。
 
 ## 开发相关
 
-- [Prompt Hub-开发文档v3.md](Prompt Hub-开发文档v3.md) - 完整产品规格文档
+- [Joey Prompthub 开发文档](https://github.com/Joey-233/Joey-Prompthub/blob/main/Joey-Prompthub-%E5%BC%80%E5%8F%91%E6%96%87%E6%A1%A3v3.md) - 完整产品规格文档
 - [CLAUDE.md](CLAUDE.md) - Claude Code 项目说明
 
 ---
@@ -49,4 +48,3 @@ Prompt Hub 完全免费，支持 Windows / macOS / Linux。
 ## 开源协议
 
 [MIT](LICENSE)
-

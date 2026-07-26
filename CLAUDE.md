@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-本项目是 Prompt Hub —— 一个 Electron 桌面应用，用于管理 AI 绘图和 LLM 提示词。
+本项目是 Joey Prompthub —— 一个 Electron 桌面应用，用于管理 AI 绘图和 LLM 提示词。
 
 ## 项目概要
 

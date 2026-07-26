@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useRef, useState, type ChangeEvent } from 'react'
 
 import { describeImage } from '../../services/ai'
 import { readImageFileAsDataUrl } from '../../lib/imageFile'
+import { ModalDialog } from '../ui/ModalDialog'
 
 interface RecognizeMode {
   id: string
@@ -39,14 +40,6 @@ export function RecognizeImageDialog({
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [modeId, setModeId] = useState(MODES[0].id)
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
 
   const [imageDataUrl, setImageDataUrl] = useState('')
   const [result, setResult] = useState('')
@@ -100,89 +93,92 @@ export function RecognizeImageDialog({
   }
 
   return (
-    <div className="dialog-backdrop" onClick={onClose}>
-      <div className="dialog-panel" onClick={(e) => e.stopPropagation()}>
-        <div className="dialog-header">
-          <h3 className="dialog-title">识图生成提示词</h3>
-          <button className="dialog-close" type="button" aria-label="关闭" onClick={onClose}>
-            ×
-          </button>
-        </div>
-
-        <div className="direction-row">
-          {MODES.map((mode) => (
-            <button
-              key={mode.id}
-              className="filter-chip"
-              data-active={modeId === mode.id}
-              type="button"
-              onClick={() => setModeId(mode.id)}
-            >
-              {mode.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="recognize-grid">
-          <div className="recognize-upload">
-            {imageDataUrl ? (
-              <img alt="待识别图片预览" className="recognize-preview" src={imageDataUrl} />
-            ) : (
-              <p className="recognize-placeholder">还没有选择图片</p>
-            )}
-            <button
-              className="editor-action"
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {imageDataUrl ? '换一张图片' : '选择图片'}
-            </button>
-            <input
-              ref={fileInputRef}
-              hidden
-              accept="image/*"
-              aria-label="选择要识别的图片"
-              type="file"
-              onChange={(event) => void handleFileChange(event)}
-            />
-          </div>
-          <label className="field">
-            <span className="field-label">识别结果</span>
-            <textarea
-              className="field-textarea field-textarea-mono"
-              placeholder="选择图片后点击「开始识别」"
-              readOnly
-              value={result}
-            />
-          </label>
-        </div>
-
-        <p className="field-hint">
-          识图走设置页「识图（视觉模型）」的配置——默认跟随 AI 服务，可在那里单独指定视觉模型（如
-          gpt-4o、glm-4v、qwen-vl-plus）或独立接另一家服务。
-        </p>
-
-        {error ? <div className="error-banner">{error}</div> : null}
-
-        <div className="dialog-actions">
-          <button
-            className="editor-action"
-            disabled={!imageDataUrl || loading}
-            type="button"
-            onClick={() => void handleRecognize()}
-          >
-            {loading ? '识别中...' : '开始识别'}
-          </button>
-          <button
-            className="editor-action"
-            disabled={!result}
-            type="button"
-            onClick={() => onAccept(result)}
-          >
-            填入快速录入
-          </button>
-        </div>
+    <ModalDialog titleId="recognize-dialog-title" closeDisabled={loading} onClose={onClose}>
+      <div className="dialog-header">
+        <h3 className="dialog-title" id="recognize-dialog-title">
+          识图生成提示词
+        </h3>
+        <button className="dialog-close" type="button" aria-label="关闭" onClick={onClose}>
+          ×
+        </button>
       </div>
-    </div>
+
+      <div className="direction-row">
+        {MODES.map((mode) => (
+          <button
+            key={mode.id}
+            className="filter-chip"
+            data-active={modeId === mode.id}
+            type="button"
+            onClick={() => setModeId(mode.id)}
+          >
+            {mode.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="recognize-grid">
+        <div className="recognize-upload">
+          {imageDataUrl ? (
+            <img alt="待识别图片预览" className="recognize-preview" src={imageDataUrl} />
+          ) : (
+            <p className="recognize-placeholder">还没有选择图片</p>
+          )}
+          <button
+            className="editor-action"
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {imageDataUrl ? '换一张图片' : '选择图片'}
+          </button>
+          <input
+            ref={fileInputRef}
+            hidden
+            accept="image/*"
+            aria-label="选择要识别的图片"
+            type="file"
+            onChange={(event) => void handleFileChange(event)}
+          />
+        </div>
+        <label className="field">
+          <span className="field-label">识别结果</span>
+          <textarea
+            className="field-textarea field-textarea-mono"
+            placeholder="选择图片后点击「开始识别」"
+            readOnly
+            value={result}
+          />
+        </label>
+      </div>
+
+      <p className="field-hint">
+        识图复用设置页的「文字 API」地址、模型和 API Key；请确保当前模型支持图片输入。
+      </p>
+
+      {error ? (
+        <div className="error-banner" role="alert">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="dialog-actions">
+        <button
+          className="editor-action"
+          disabled={!imageDataUrl || loading}
+          type="button"
+          onClick={() => void handleRecognize()}
+        >
+          {loading ? '识别中...' : '开始识别'}
+        </button>
+        <button
+          className="editor-action"
+          disabled={!result}
+          type="button"
+          onClick={() => onAccept(result)}
+        >
+          填入快速录入
+        </button>
+      </div>
+    </ModalDialog>
   )
 }

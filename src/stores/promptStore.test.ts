@@ -4,13 +4,29 @@ import type { PromptRecord } from '../shared/types'
 import { usePromptStore } from './promptStore'
 
 function prompt(id: string, content: string): PromptRecord {
-  return { id, title: id, content, notes: '', tags: [], params: {}, isFavorite: false, lastUsedAt: null, lastGeneratedAt: null, useCount: 0, createdAt: '2026-01-01', updatedAt: '2026-01-01' }
+  return {
+    id,
+    title: id,
+    content,
+    notes: '',
+    tags: [],
+    params: {},
+    isFavorite: false,
+    lastUsedAt: null,
+    lastGeneratedAt: null,
+    useCount: 0,
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-01'
+  }
 }
 
 function deferred<T>() {
   let resolve!: (value: T) => void
   let reject!: (reason: unknown) => void
-  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej })
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
   return { promise, resolve, reject }
 }
 
@@ -18,7 +34,10 @@ describe('promptStore update sequencing', () => {
   it('does not let an older response overwrite a newer response for the same prompt', async () => {
     const a = deferred<PromptRecord>()
     const b = deferred<PromptRecord>()
-    window.promptHub.prompts.update = vi.fn().mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise)
+    window.promptHub.prompts.update = vi
+      .fn()
+      .mockReturnValueOnce(a.promise)
+      .mockReturnValueOnce(b.promise)
     usePromptStore.setState({ prompts: [prompt('one', 'original')] })
 
     const requestA = usePromptStore.getState().updatePrompt('one', { content: 'A' })
@@ -34,7 +53,10 @@ describe('promptStore update sequencing', () => {
   it('sequences updates independently for different prompt IDs', async () => {
     const one = deferred<PromptRecord>()
     const two = deferred<PromptRecord>()
-    window.promptHub.prompts.update = vi.fn().mockReturnValueOnce(one.promise).mockReturnValueOnce(two.promise)
+    window.promptHub.prompts.update = vi
+      .fn()
+      .mockReturnValueOnce(one.promise)
+      .mockReturnValueOnce(two.promise)
     usePromptStore.setState({ prompts: [prompt('one', 'old one'), prompt('two', 'old two')] })
     const requestOne = usePromptStore.getState().updatePrompt('one', { content: 'new one' })
     const requestTwo = usePromptStore.getState().updatePrompt('two', { content: 'new two' })
@@ -42,13 +64,19 @@ describe('promptStore update sequencing', () => {
     await requestTwo
     one.resolve(prompt('one', 'new one'))
     await requestOne
-    expect(usePromptStore.getState().prompts.map(({ content }) => content)).toEqual(['new one', 'new two'])
+    expect(usePromptStore.getState().prompts.map(({ content }) => content)).toEqual([
+      'new one',
+      'new two'
+    ])
   })
 
   it('keeps existing data and rejects when the latest update fails', async () => {
     const older = deferred<PromptRecord>()
     const latest = deferred<PromptRecord>()
-    window.promptHub.prompts.update = vi.fn().mockReturnValueOnce(older.promise).mockReturnValueOnce(latest.promise)
+    window.promptHub.prompts.update = vi
+      .fn()
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(latest.promise)
     usePromptStore.setState({ prompts: [prompt('one', 'stable')] })
     const olderRequest = usePromptStore.getState().updatePrompt('one', { content: 'older' })
     const latestRequest = usePromptStore.getState().updatePrompt('one', { content: 'lost' })
@@ -59,20 +87,38 @@ describe('promptStore update sequencing', () => {
     expect(usePromptStore.getState().prompts[0].content).toBe('stable')
   })
 
-  it.each(['update-first', 'favorite-first'])('composes editor and favorite updates when %s completes', async (order) => {
-    const content = deferred<PromptRecord>()
-    const favorite = deferred<PromptRecord>()
-    window.promptHub.prompts.update = vi.fn().mockReturnValueOnce(content.promise).mockReturnValueOnce(favorite.promise)
-    const original = prompt('one', 'original')
-    usePromptStore.setState({ prompts: [original] })
-    const contentRequest = usePromptStore.getState().updatePrompt('one', { content: 'edited' })
-    const favoriteRequest = usePromptStore.getState().toggleFavorite(original)
-    const resolveContent = () => content.resolve({ ...original, content: 'edited' })
-    const resolveFavorite = () => favorite.resolve({ ...original, isFavorite: true })
-    if (order === 'update-first') { resolveContent(); await contentRequest; resolveFavorite(); await favoriteRequest }
-    else { resolveFavorite(); await favoriteRequest; resolveContent(); await contentRequest }
-    expect(usePromptStore.getState().prompts[0]).toMatchObject({ content: 'edited', isFavorite: true })
-  })
+  it.each(['update-first', 'favorite-first'])(
+    'composes editor and favorite updates when %s completes',
+    async (order) => {
+      const content = deferred<PromptRecord>()
+      const favorite = deferred<PromptRecord>()
+      window.promptHub.prompts.update = vi
+        .fn()
+        .mockReturnValueOnce(content.promise)
+        .mockReturnValueOnce(favorite.promise)
+      const original = prompt('one', 'original')
+      usePromptStore.setState({ prompts: [original] })
+      const contentRequest = usePromptStore.getState().updatePrompt('one', { content: 'edited' })
+      const favoriteRequest = usePromptStore.getState().toggleFavorite(original)
+      const resolveContent = () => content.resolve({ ...original, content: 'edited' })
+      const resolveFavorite = () => favorite.resolve({ ...original, isFavorite: true })
+      if (order === 'update-first') {
+        resolveContent()
+        await contentRequest
+        resolveFavorite()
+        await favoriteRequest
+      } else {
+        resolveFavorite()
+        await favoriteRequest
+        resolveContent()
+        await contentRequest
+      }
+      expect(usePromptStore.getState().prompts[0]).toMatchObject({
+        content: 'edited',
+        isFavorite: true
+      })
+    }
+  )
 
   it('ignores a stale load snapshot after a local mutation succeeds', async () => {
     const load = deferred<PromptRecord[]>()
@@ -89,7 +135,10 @@ describe('promptStore update sequencing', () => {
   it('keeps the newest load result when concurrent loads resolve in reverse order', async () => {
     const older = deferred<PromptRecord[]>()
     const newer = deferred<PromptRecord[]>()
-    window.promptHub.prompts.list = vi.fn().mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise)
+    window.promptHub.prompts.list = vi
+      .fn()
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise)
     const olderLoad = usePromptStore.getState().loadPrompts()
     const newerLoad = usePromptStore.getState().loadPrompts()
     newer.resolve([prompt('newer', 'new list')])

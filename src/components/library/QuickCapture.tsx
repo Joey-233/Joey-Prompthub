@@ -1,4 +1,11 @@
-import { FormEvent, KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  FormEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 
 import { IMAGE_TAG, LLM_TAG, TYPE_TAGS } from '../../shared/types'
 import { usePromptStore } from '../../stores/promptStore'
@@ -33,9 +40,16 @@ export function QuickCapture() {
   const [tagDraft, setTagDraft] = useState('')
   const [showRecognizeDialog, setShowRecognizeDialog] = useState(false)
   const [focusWithin, setFocusWithin] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
-  const expanded = focusWithin || content.length > 0 || tagDraft.trim().length > 0 || tags.length > 0 || showRecognizeDialog
+  const expanded =
+    focusWithin ||
+    content.length > 0 ||
+    tagDraft.trim().length > 0 ||
+    tags.length > 0 ||
+    showRecognizeDialog
 
   useEffect(() => {
     const input = inputRef.current
@@ -55,7 +69,7 @@ export function QuickCapture() {
   const suggestions = useMemo(() => rankSuggestions(allPrompts, tags), [allPrompts, tags])
 
   function commitUserTag(raw: string) {
-    const value = raw.trim()
+    const value = raw.trim().slice(0, 40)
     setTagDraft('')
     if (!value) return
     if (TYPE_TAGS.includes(value as (typeof TYPE_TAGS)[number])) {
@@ -63,7 +77,9 @@ export function QuickCapture() {
       toggleTypeTag(value as (typeof TYPE_TAGS)[number])
       return
     }
-    setTags((current) => (current.includes(value) ? current : [...current, value]))
+    setTags((current) =>
+      current.includes(value) || current.length >= 20 ? current : [...current, value]
+    )
   }
 
   function removeTag(tag: string) {
@@ -100,17 +116,23 @@ export function QuickCapture() {
     if (!trimmed) return
 
     const pending = tagDraft.trim()
-    const finalTags =
-      pending && !tags.includes(pending) ? [...tags, pending] : tags
+    const finalTags = pending && !tags.includes(pending) ? [...tags, pending] : tags
 
-    await createPrompt({
-      content: trimmed,
-      tags: finalTags
-    })
-
-    setContent('')
-    setTags([])
-    setTagDraft('')
+    setSaving(true)
+    setError('')
+    try {
+      await createPrompt({
+        content: trimmed,
+        tags: finalTags.slice(0, 20)
+      })
+      setContent('')
+      setTags([])
+      setTagDraft('')
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : '保存失败，请重试')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -207,10 +229,16 @@ export function QuickCapture() {
           识图
         </button>
 
-        <button className="capture-save" type="submit">
-          保存
+        <button className="capture-save" disabled={saving} type="submit">
+          {saving ? '保存中…' : '保存'}
         </button>
       </div>
+
+      {error ? (
+        <p className="field-hint field-hint-error" role="alert">
+          {error}
+        </p>
+      ) : null}
 
       {showRecognizeDialog ? (
         <RecognizeImageDialog

@@ -16,11 +16,9 @@ const fakeWindow = {
   }),
   setAlwaysOnTop: vi.fn(),
   setVisibleOnAllWorkspaces: vi.fn(),
-  setIgnoreMouseEvents: vi.fn(
-    (ignore: boolean, options?: { forward?: boolean }) => {
-      ignoreCalls.push({ ignore, forward: options?.forward })
-    }
-  ),
+  setIgnoreMouseEvents: vi.fn((ignore: boolean, options?: { forward?: boolean }) => {
+    ignoreCalls.push({ ignore, forward: options?.forward })
+  }),
   isDestroyed: vi.fn(() => false),
   showInactive: vi.fn(),
   moveTop: vi.fn(),
@@ -33,7 +31,7 @@ const fakeWindow = {
       handler()
     }
   }),
-  webContents: { send: vi.fn(), on: vi.fn() }
+  webContents: { send: vi.fn(), on: vi.fn(), setWindowOpenHandler: vi.fn() }
 }
 
 const cursorPoint = { x: 0, y: 0 }
@@ -46,8 +44,11 @@ vi.mock('electron', () => ({
   screen: {
     getCursorScreenPoint: vi.fn(() => ({ ...cursorPoint })),
     getDisplayNearestPoint: vi.fn(() => ({ workArea })),
-    getPrimaryDisplay: vi.fn(() => ({ workArea }))
-  }
+    getPrimaryDisplay: vi.fn(() => ({ workArea })),
+    on: vi.fn(),
+    off: vi.fn()
+  },
+  shell: { openExternal: vi.fn() }
 }))
 
 import { createFloatingBallWindow } from './floatingBall'
@@ -89,7 +90,7 @@ describe('floating ball main process drag', () => {
 
     cursorPoint.x = initial.x + 30 - 200
     cursorPoint.y = initial.y + 30 + 100
-    vi.advanceTimersByTime(8)
+    vi.advanceTimersByTime(16)
 
     let bounds = setBoundsCalls.at(-1)
     expect(bounds, 'setBounds should fire on the first drag tick').toBeDefined()
@@ -98,7 +99,7 @@ describe('floating ball main process drag', () => {
 
     cursorPoint.x += 50
     cursorPoint.y -= 20
-    vi.advanceTimersByTime(8)
+    vi.advanceTimersByTime(16)
     bounds = setBoundsCalls.at(-1)
     expect(bounds!.x).toBe(initial.x - 150)
     expect(bounds!.y).toBe(initial.y + 80)
@@ -114,7 +115,7 @@ describe('floating ball main process drag', () => {
 
     cursorPoint.x = -500
     cursorPoint.y = -500
-    vi.advanceTimersByTime(8)
+    vi.advanceTimersByTime(16)
 
     const bounds = setBoundsCalls.at(-1)!
     expect(bounds.x).toBe(workArea.x + 0) // WINDOW_MARGIN
@@ -132,7 +133,7 @@ describe('floating ball main process drag', () => {
     // Drag past the centre vertically and toward the left half.
     cursorPoint.x = 800
     cursorPoint.y = 240
-    vi.advanceTimersByTime(8)
+    vi.advanceTimersByTime(16)
 
     const droppedBounds = setBoundsCalls.at(-1)!
     const stateAfterDrag = ball.getState()
@@ -161,7 +162,7 @@ describe('floating ball main process drag', () => {
 
     cursorPoint.x = initial.x + 36 - 80
     cursorPoint.y = initial.y + 36 + 40
-    vi.advanceTimersByTime(8)
+    vi.advanceTimersByTime(16)
 
     const finalState = ball.endDrag(false)
     const stoppedAt = setBoundsCalls.length
@@ -170,7 +171,7 @@ describe('floating ball main process drag', () => {
     cursorPoint.y = 100
     // Don't advance long enough for the hover poll (50ms) to fire any
     // click-through toggles, since those are not setBounds anyway.
-    vi.advanceTimersByTime(8)
+    vi.advanceTimersByTime(16)
 
     expect(setBoundsCalls.length).toBe(stoppedAt)
     expect(finalState.x).toBe(initial.x - 80)
@@ -188,13 +189,13 @@ describe('floating ball click-through hover poll', () => {
     // Move the cursor onto the centre of the ball (window is 120×120, ball is centered) and tick once.
     cursorPoint.x = state.x + 60
     cursorPoint.y = state.y + 60
-    vi.advanceTimersByTime(50)
+    vi.advanceTimersByTime(100)
     expect(ignoreCalls.at(-1)).toEqual({ ignore: false, forward: undefined })
 
     // Move the cursor far away — click-through should re-engage.
     cursorPoint.x = 0
     cursorPoint.y = 0
-    vi.advanceTimersByTime(50)
+    vi.advanceTimersByTime(100)
     expect(ignoreCalls.at(-1)).toEqual({ ignore: true, forward: true })
   })
 

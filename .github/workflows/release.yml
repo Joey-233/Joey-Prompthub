@@ -1,0 +1,46 @@
+name: Signed Windows release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+      RELEASE_BUILD: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Verify release inputs
+        shell: pwsh
+        run: |
+          if (-not $env:CSC_LINK -or -not $env:CSC_KEY_PASSWORD) { throw 'Windows signing secrets are required' }
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          if ("v$version" -ne "${{ github.ref_name }}") { throw "Tag must equal package version v$version" }
+      - run: npm ci
+      - run: npm run verify
+      - run: npm run test:e2e
+      - run: npm run dist:win
+      - name: Verify signature and create checksums
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem release -Filter '*Setup*x64.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'Installer not found' }
+          $signature = Get-AuthenticodeSignature $installer.FullName
+          if ($signature.Status -ne 'Valid') { throw "Invalid Authenticode signature: $($signature.Status)" }
+          Get-FileHash $installer.FullName -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $($installer.Name)" } | Set-Content release/SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*Setup*x64.exe
+            release/SHA256SUMS.txt

@@ -1,11 +1,10 @@
-import { IMAGE_TAG } from '../shared/types'
 import type {
-  CreatePromptInput,
-  FloatingWindowState,
   GenerationRecord,
-  MoveFloatingWindowInput,
   PromptRecord,
-  PromptHubApi
+  PromptHubApi,
+  PromptHubBackupV1,
+  Seedance2PresetRecord,
+  Seedance2TemplateRecord
 } from '../shared/types'
 
 const STORAGE_KEY = 'prompthub.browser-fallback'
@@ -14,8 +13,8 @@ type BrowserStore = {
   prompts: PromptRecord[]
   generations: GenerationRecord[]
   settings: Record<string, unknown>
-  secure: Record<string, string>
-  floating: FloatingWindowState
+  templates: Seedance2TemplateRecord[]
+  presets: Seedance2PresetRecord[]
 }
 
 let memoryStore: BrowserStore | null = null
@@ -26,19 +25,15 @@ function createDefaultStore(): BrowserStore {
     prompts: [],
     generations: [],
     settings: {
-      ai_preset: 'openai',
-      ai_model: 'gpt-4.1-mini',
-      image_preset: 'mock-image',
+      ai_preset: 'doubao',
+      ai_base_url: 'https://ark.cn-beijing.volces.com/api/v3',
+      ai_model: 'doubao-seed-evolving',
       theme_mode: 'system',
-      launch_at_login: false
+      launch_at_login: false,
+      floating_enabled: true
     },
-    secure: {},
-    floating: {
-      x: 0,
-      y: 0,
-      side: 'right',
-      expanded: false
-    }
+    templates: [],
+    presets: []
   }
 }
 
@@ -95,28 +90,7 @@ function normalizePrompt(prompt: PromptRecord): PromptRecord {
 }
 
 function sortPromptsByUpdatedAt(prompts: PromptRecord[]) {
-  return [...prompts]
-    .map(normalizePrompt)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-}
-
-function sortGenerationsByCreatedAt(generations: GenerationRecord[]) {
-  return [...generations].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-}
-
-function computeFloatingState(input: MoveFloatingWindowInput, previous: FloatingWindowState) {
-  const viewportWidth =
-    typeof window === 'undefined' ? 1440 : window.screen.availWidth || window.innerWidth || 1440
-  const leftEdge = 16
-  const rightEdge = Math.max(leftEdge, viewportWidth - 88)
-  const side = input.x < viewportWidth / 2 ? 'left' : 'right'
-
-  return {
-    x: input.snap ? (side === 'left' ? leftEdge : rightEdge) : input.x,
-    y: Math.max(16, input.y),
-    side,
-    expanded: false
-  } satisfies FloatingWindowState
+  return [...prompts].map(normalizePrompt).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 }
 
 function createPromptHubFallback(): PromptHubApi {
@@ -139,6 +113,16 @@ function createPromptHubFallback(): PromptHubApi {
           })
         )
       },
+      async listPage(filter) {
+        const all = await api.prompts.list(filter)
+        const offset = Math.max(0, filter?.offset ?? 0)
+        const limit = Math.max(1, Math.min(filter?.limit ?? 100, 200))
+        const items = all.slice(offset, offset + limit)
+        return { items, total: all.length, hasMore: offset + items.length < all.length }
+      },
+      async get(id) {
+        return cloneValue(readStore().prompts.find((prompt) => prompt.id === id) ?? null)
+      },
       async create(input) {
         const store = readStore()
         const timestamp = new Date().toISOString()
@@ -149,7 +133,7 @@ function createPromptHubFallback(): PromptHubApi {
           notes: input.notes ?? '',
           tags: [...(input.tags ?? [])],
           params: cloneValue(input.params ?? {}),
-          previewImage: (input.previewImages?.[0] ?? input.previewImage) ?? '',
+          previewImage: input.previewImages?.[0] ?? input.previewImage ?? '',
           previewImages: (input.previewImages ?? (input.previewImage ? [input.previewImage] : []))
             .filter((s): s is string => typeof s === 'string' && s.length > 0)
             .slice(0, 3),
@@ -205,29 +189,6 @@ function createPromptHubFallback(): PromptHubApi {
         writeStore(store)
       }
     },
-    generations: {
-      async list() {
-        return sortGenerationsByCreatedAt(readStore().generations)
-      },
-      async create(input) {
-        const store = readStore()
-        const created: GenerationRecord = {
-          id: crypto.randomUUID(),
-          promptId: input.promptId ?? null,
-          providerId: input.providerId,
-          status: input.status,
-          promptTitleSnapshot: input.promptTitleSnapshot,
-          promptSnapshot: input.promptSnapshot,
-          imageData: input.imageData,
-          params: cloneValue(input.params ?? {}),
-          createdAt: new Date().toISOString()
-        }
-
-        store.generations.unshift(created)
-        writeStore(store)
-        return cloneValue(created)
-      }
-    },
     settings: {
       async list() {
         return cloneValue(readStore().settings)
@@ -238,22 +199,79 @@ function createPromptHubFallback(): PromptHubApi {
         writeStore(store)
       }
     },
+    data: {
+      async exportBackup() {
+        const store = readStore()
+        return {
+          format: 'prompthub-backup',
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          prompts: cloneValue(store.prompts),
+          generations: cloneValue(store.generations),
+          settings: cloneValue(store.settings),
+          seedance2: {
+            templates: cloneValue(store.templates),
+            presets: cloneValue(store.presets)
+          },
+          excludes: ['apiKeys']
+        } satisfies PromptHubBackupV1
+      },
+      async previewImport(value) {
+        const backup = value as PromptHubBackupV1
+        if (backup?.format !== 'prompthub-backup' || backup.version !== 1) {
+          throw new Error('备份格式不受支持')
+        }
+        const store = readStore()
+        const ids = new Set([
+          ...store.prompts.map((item) => item.id),
+          ...store.generations.map((item) => item.id),
+          ...store.templates.map((item) => item.id),
+          ...store.presets.map((item) => item.id)
+        ])
+        return {
+          prompts: backup.prompts.length,
+          generations: backup.generations.length,
+          templates: backup.seedance2.templates.length,
+          presets: backup.seedance2.presets.length,
+          conflicts: [
+            ...backup.prompts,
+            ...backup.generations,
+            ...backup.seedance2.templates,
+            ...backup.seedance2.presets
+          ].filter((item) => ids.has(item.id)).length
+        }
+      },
+      async importBackup(value, mode) {
+        const backup = value as PromptHubBackupV1
+        const preview = await api.data.previewImport(backup)
+        const store = mode === 'replace' ? createDefaultStore() : readStore()
+        const merge = <T extends { id: string }>(existing: T[], incoming: T[]) => {
+          const ids = new Set(existing.map((item) => item.id))
+          return [...existing, ...incoming.filter((item) => !ids.has(item.id))]
+        }
+        store.prompts = merge(store.prompts, backup.prompts)
+        store.generations = merge(store.generations, backup.generations)
+        store.templates = merge(store.templates, backup.seedance2.templates)
+        store.presets = merge(store.presets, backup.seedance2.presets)
+        store.settings = { ...store.settings, ...backup.settings }
+        writeStore(store)
+        return preview
+      },
+      async storageStats() {
+        const serialized = JSON.stringify(readStore())
+        const databaseBytes = new TextEncoder().encode(serialized).byteLength
+        return { databaseBytes, assetsBytes: 0, assetCount: 0, totalBytes: databaseBytes }
+      }
+    },
     secure: {
-      async has(key) {
-        return Boolean(readStore().secure[key])
+      async has() {
+        return false
       },
-      async set(key, value) {
-        const store = readStore()
-        store.secure[key] = value
-        writeStore(store)
+      async set() {
+        throw new Error('浏览器演示模式不保存 API Key，请使用桌面应用')
       },
-      async delete(key) {
-        const store = readStore()
-        delete store.secure[key]
-        writeStore(store)
-      },
-      async reveal(key) {
-        return readStore().secure[key] ?? null
+      async delete() {
+        throw new Error('浏览器演示模式没有可清除的 API Key')
       }
     },
     // The browser fallback only exists for the static prototype (no Electron
@@ -266,35 +284,54 @@ function createPromptHubFallback(): PromptHubApi {
       },
       async describeImage() {
         throw new Error('当前为浏览器演示模式，识图需要在桌面应用内使用')
-      }
-    },
-    image: {
-      async openaiGenerate() {
-        throw new Error('当前为浏览器演示模式，请改用「Mock」provider 体验流程')
       },
-      async sdWebuiGenerate() {
-        throw new Error('当前为浏览器演示模式，请改用「Mock」provider 体验流程')
+      async checkConnection() {
+        throw new Error('当前为浏览器演示模式，服务检测需要在桌面应用内使用')
+      },
+      async cancelRequest() {
+        // 演示模式没有真实网络请求。
       }
     },
     seedance2: {
       async listTemplates() {
-        return []
+        return cloneValue(readStore().templates)
       },
       async createTemplate(input) {
+        const store = readStore()
         const now = new Date().toISOString()
-        return { id: crypto.randomUUID(), title: input.title, data: input.data, createdAt: now, updatedAt: now }
+        const template = {
+          id: crypto.randomUUID(),
+          title: input.title,
+          data: input.data,
+          createdAt: now,
+          updatedAt: now
+        }
+        store.templates.unshift(template)
+        writeStore(store)
+        return cloneValue(template)
       },
       async updateTemplate(id, patch) {
+        const store = readStore()
+        const current = store.templates.find((item) => item.id === id)
+        if (!current) throw new Error('模板不存在')
         const now = new Date().toISOString()
-        return { id, title: patch.title, data: patch.data, createdAt: now, updatedAt: now }
+        const template = { ...current, title: patch.title, data: patch.data, updatedAt: now }
+        store.templates = store.templates.map((item) => (item.id === id ? template : item))
+        writeStore(store)
+        return cloneValue(template)
       },
-      async deleteTemplate() {},
+      async deleteTemplate(id) {
+        const store = readStore()
+        store.templates = store.templates.filter((item) => item.id !== id)
+        writeStore(store)
+      },
       async listPresets() {
-        return []
+        return cloneValue(readStore().presets)
       },
       async createPreset(input) {
+        const store = readStore()
         const now = new Date().toISOString()
-        return {
+        const preset = {
           id: crypto.randomUUID(),
           name: input.name,
           tags: input.tags ?? [],
@@ -302,36 +339,35 @@ function createPromptHubFallback(): PromptHubApi {
           createdAt: now,
           updatedAt: now
         }
+        store.presets.unshift(preset)
+        writeStore(store)
+        return cloneValue(preset)
       },
       async updatePreset(id, patch) {
+        const store = readStore()
+        const current = store.presets.find((item) => item.id === id)
+        if (!current) throw new Error('预设不存在')
         const now = new Date().toISOString()
-        return {
-          id,
+        const preset = {
+          ...current,
           name: patch.name,
           tags: patch.tags ?? [],
           segment: patch.segment,
-          createdAt: now,
           updatedAt: now
         }
+        store.presets = store.presets.map((item) => (item.id === id ? preset : item))
+        writeStore(store)
+        return cloneValue(preset)
       },
-      async deletePreset() {}
+      async deletePreset(id) {
+        const store = readStore()
+        store.presets = store.presets.filter((item) => item.id !== id)
+        writeStore(store)
+      }
     },
     system: {
       async clipboardImport() {
-        try {
-          const text = (await navigator.clipboard.readText()).trim()
-
-          if (!text) {
-            return null
-          }
-
-          return api.prompts.create({
-            content: text,
-            tags: [IMAGE_TAG]
-          } satisfies CreatePromptInput)
-        } catch {
-          return null
-        }
+        return null
       },
       async openMainWindow() {},
       async setLaunchAtLogin(enabled) {
@@ -339,43 +375,36 @@ function createPromptHubFallback(): PromptHubApi {
         store.settings.launch_at_login = enabled
         writeStore(store)
       },
-      async quitApp() {},
-      async getFloatingState() {
-        return cloneValue(readStore().floating)
-      },
-      async setFloatingExpanded() {
+      async setFloatingEnabled(enabled) {
         const store = readStore()
-        store.floating.expanded = false
+        store.settings.floating_enabled = enabled
         writeStore(store)
-        return cloneValue(store.floating)
       },
-      async moveFloatingWindow(input) {
-        const store = readStore()
-        store.floating = computeFloatingState(input, store.floating)
-        writeStore(store)
-        return cloneValue(store.floating)
-      },
-      async floatingDragStart() {
-        return cloneValue(readStore().floating)
-      },
-      async floatingDragEnd() {
-        return cloneValue(readStore().floating)
-      },
-      async showFloatingContextMenu() {}
+      async quitApp() {}
     }
   }
 
   return api
 }
 
-export function ensurePromptHubBridge() {
+export function ensurePromptHubBridge(options: { allowDemo?: boolean } = {}) {
   const currentWindow = window as Window & { promptHub?: PromptHubApi }
 
   if (currentWindow.promptHub) {
     return currentWindow.promptHub
   }
 
+  const allowDemo =
+    options.allowDemo === true ||
+    import.meta.env.MODE === 'test' ||
+    import.meta.env.VITE_PROMPTHUB_BROWSER_DEMO === '1'
+
+  if (!allowDemo) {
+    throw new Error('Joey Prompthub 安全桥接加载失败，请重启桌面应用')
+  }
+
   browserFallback ??= createPromptHubFallback()
+  document.documentElement.dataset.promptHubMode = 'demo'
 
   Object.defineProperty(window, 'promptHub', {
     configurable: true,

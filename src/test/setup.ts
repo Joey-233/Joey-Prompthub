@@ -3,53 +3,70 @@ import { afterEach, beforeEach, vi } from 'vitest'
 
 import { useAppStore } from '../stores/appStore'
 import { usePromptStore } from '../stores/promptStore'
-import { useTestBenchStore } from '../stores/testBenchStore'
 
 beforeEach(() => {
   if (typeof window !== 'undefined') {
+    delete document.documentElement.dataset.promptHubMode
     window.localStorage.removeItem('prompthub:layout')
     Object.defineProperty(window, 'promptHub', {
       configurable: true,
       value: {
         prompts: {
           list: vi.fn().mockResolvedValue([]),
+          listPage: vi.fn().mockImplementation(async (filter) => {
+            const items = await window.promptHub.prompts.list(filter)
+            return { items, total: items.length, hasMore: false }
+          }),
+          get: vi.fn().mockImplementation(async (id) => {
+            const items = await window.promptHub.prompts.list()
+            return items.find((item) => item.id === id) ?? null
+          }),
           create: vi.fn(),
           update: vi.fn(),
           delete: vi.fn()
         },
-        generations: {
-          list: vi.fn().mockResolvedValue([]),
-          create: vi.fn()
-        },
         settings: {
-          list: vi.fn().mockResolvedValue({
-            image_preset: 'mock-image'
-          }),
+          list: vi.fn().mockResolvedValue({}),
           set: vi.fn()
+        },
+        data: {
+          exportBackup: vi.fn(),
+          previewImport: vi.fn().mockImplementation(async (backup) => ({
+            prompts: Array.isArray(backup?.prompts) ? backup.prompts.length : 0,
+            generations: Array.isArray(backup?.generations) ? backup.generations.length : 0,
+            templates: Array.isArray(backup?.seedance2?.templates)
+              ? backup.seedance2.templates.length
+              : 0,
+            presets: Array.isArray(backup?.seedance2?.presets)
+              ? backup.seedance2.presets.length
+              : 0,
+            conflicts: 0
+          })),
+          importBackup: vi.fn().mockImplementation(async (backup) => ({
+            prompts: Array.isArray(backup?.prompts) ? backup.prompts.length : 0,
+            generations: Array.isArray(backup?.generations) ? backup.generations.length : 0,
+            templates: Array.isArray(backup?.seedance2?.templates)
+              ? backup.seedance2.templates.length
+              : 0,
+            presets: Array.isArray(backup?.seedance2?.presets)
+              ? backup.seedance2.presets.length
+              : 0,
+            conflicts: 0
+          })),
+          storageStats: vi
+            .fn()
+            .mockResolvedValue({ databaseBytes: 0, assetsBytes: 0, assetCount: 0, totalBytes: 0 })
         },
         secure: {
           has: vi.fn().mockResolvedValue(false),
           set: vi.fn(),
-          delete: vi.fn(),
-          reveal: vi.fn().mockResolvedValue(null)
+          delete: vi.fn()
         },
         ai: {
           optimize: vi.fn().mockResolvedValue(''),
-          describeImage: vi.fn().mockResolvedValue('')
-        },
-        image: {
-          openaiGenerate: vi.fn().mockResolvedValue({
-            providerId: 'openai-image',
-            status: 'failed',
-            effectiveParams: {},
-            results: []
-          }),
-          sdWebuiGenerate: vi.fn().mockResolvedValue({
-            providerId: 'sd-webui',
-            status: 'failed',
-            effectiveParams: {},
-            results: []
-          })
+          describeImage: vi.fn().mockResolvedValue(''),
+          checkConnection: vi.fn().mockResolvedValue({ message: '连接成功', models: [] }),
+          cancelRequest: vi.fn().mockResolvedValue(undefined)
         },
         seedance2: {
           listTemplates: vi.fn().mockResolvedValue([]),
@@ -64,46 +81,40 @@ beforeEach(() => {
           clipboardImport: vi.fn().mockResolvedValue(null),
           openMainWindow: vi.fn(),
           setLaunchAtLogin: vi.fn(),
-          quitApp: vi.fn(),
-          getFloatingState: vi.fn().mockResolvedValue({
-            x: 960,
-            y: 320,
-            side: 'right',
-            expanded: false
-          }),
-          setFloatingExpanded: vi.fn().mockImplementation(async (expanded: boolean) => ({
-            x: 960,
-            y: 320,
-            side: 'right',
-            expanded
-          })),
-          moveFloatingWindow: vi.fn().mockImplementation(async (input: { x: number; y: number; snap?: boolean }) => ({
-            x: input.x,
-            y: input.y,
-            side: input.x < 720 ? 'left' : 'right',
-            expanded: false
-          })),
-          floatingDragStart: vi.fn().mockResolvedValue({
-            x: 960,
-            y: 320,
-            side: 'right',
-            expanded: false
-          }),
-          floatingDragEnd: vi.fn().mockResolvedValue({
-            x: 960,
-            y: 320,
-            side: 'right',
-            expanded: false
-          }),
-          showFloatingContextMenu: vi.fn().mockResolvedValue(undefined)
+          setFloatingEnabled: vi.fn(),
+          quitApp: vi.fn()
         }
+      }
+    })
+    Object.defineProperty(window, 'promptHubFloating', {
+      configurable: true,
+      value: {
+        getState: vi.fn().mockResolvedValue({
+          x: 960,
+          y: 320,
+          side: 'right',
+          expanded: false
+        }),
+        dragStart: vi.fn().mockResolvedValue({
+          x: 960,
+          y: 320,
+          side: 'right',
+          expanded: false
+        }),
+        dragEnd: vi.fn().mockResolvedValue({
+          x: 960,
+          y: 320,
+          side: 'right',
+          expanded: false
+        }),
+        openMainWindow: vi.fn().mockResolvedValue(undefined),
+        showContextMenu: vi.fn().mockResolvedValue(undefined)
       }
     })
   }
 
   useAppStore.setState({
     currentView: 'library',
-    pendingTestBenchPromptId: null,
     navigationGuard: null,
     layout: {
       resourceCollapsed: false,
@@ -115,26 +126,16 @@ beforeEach(() => {
   usePromptStore.setState({
     prompts: [],
     loading: false,
+    error: null,
+    total: 0,
+    hasMore: false,
     filterTag: null,
     sortMode: 'default',
     search: '',
     selectedPromptId: null,
+    selectedPrompt: null,
+    loadingDetail: false,
     drafts: {}
-  })
-  useTestBenchStore.setState({
-    prompts: [],
-    selectedPromptId: null,
-    draftContent: '',
-    providerId: 'mock-image',
-    params: { width: 512, height: 512, count: 3 },
-    results: [],
-    history: [],
-    loading: false,
-    loadingPrompts: false,
-    loadingHistory: false,
-    historyScope: 'current-prompt',
-    saveStatus: 'idle',
-    generateError: null
   })
 })
 

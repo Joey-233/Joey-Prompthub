@@ -1,39 +1,63 @@
 {
-  "name": "prompthub",
-  "productName": "Prompt Hub",
-  "description": "桌面提示词工坊：悬浮球收录灵感、统一管理 AI 绘图与 LLM 提示词。",
+  "name": "joey-prompthub",
+  "productName": "Joey Prompthub",
+  "description": "本地优先的桌面提示词工坊：悬浮球收录灵感、管理与优化提示词、编排 Seedance 2 分镜模板。",
   "author": "Joey-233 <189076254+Joey-233@users.noreply.github.com>",
+  "license": "MIT",
+  "repository": "https://github.com/Joey-233/Joey-Prompthub.git",
+  "homepage": "https://joey-233.github.io/Joey-Prompthub/",
+  "bugs": "https://github.com/Joey-233/Joey-Prompthub/issues",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.3.0",
+  "engines": {
+    "node": ">=22.12"
+  },
   "type": "module",
   "main": "out/main/main.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
     "preview": "electron-vite preview",
-    "rebuild:native": "electron-rebuild -f -w better-sqlite3",
-    "postinstall": "npm run rebuild:native",
+    "rebuild:native": "electron-builder install-app-deps",
+    "postinstall": "electron-builder install-app-deps",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:db-electron": "node scripts/run-db-smoke.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
-    "dist:win": "npm run build && electron-builder --win",
-    "dist:dir": "npm run build && electron-builder --dir"
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"electron/**/*.ts\" \"e2e/**/*.ts\" \"*.{ts,js,json,html,md}\" \"docs/RELEASE.md\" \".github/**/*.yml\" \"scripts/**/*.mjs\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"electron/**/*.ts\" \"e2e/**/*.ts\" \"*.{ts,js,json,html,md}\" \"docs/RELEASE.md\" \".github/**/*.yml\" \"scripts/**/*.mjs\"",
+    "check:bundle": "node scripts/check-bundle-size.mjs",
+    "verify": "npm run lint && npm run format:check && npm run test:coverage && npm run build && npm run test:db-electron && npm run check:bundle",
+    "sync:website-release": "node scripts/sync-website-release.mjs",
+    "prepare:mac-icon": "bash scripts/prepare-mac-icon.sh",
+    "dist:win": "npm run sync:website-release && npm run build && electron-builder --win --publish never --config.electronDist=node_modules/electron/dist",
+    "dist:dir": "npm run build && electron-builder --dir",
+    "dist:mac:dev": "bash scripts/build-mac-dev.sh",
+    "dist:mac:arm64": "npm run sync:website-release && npm run prepare:mac-icon && npm run build && electron-builder --mac --arm64 --publish never",
+    "dist:mac:x64": "npm run sync:website-release && npm run prepare:mac-icon && npm run build && electron-builder --mac --x64 --publish never"
   },
   "build": {
     "appId": "art.joeystudio.prompthub",
-    "productName": "Prompt Hub",
+    "productName": "Joey Prompthub",
     "copyright": "Copyright © 2026 Joey-233",
+    "asar": true,
+    "forceCodeSigning": false,
     "directories": {
       "output": "release",
       "buildResources": "build"
     },
     "files": [
       "out/**/*",
+      "!out/main/dbSmoke.js",
       "package.json"
     ],
     "asarUnpack": [
       "**/node_modules/better-sqlite3/**/*"
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -44,6 +68,20 @@
       ],
       "artifactName": "${productName}-${version}-Setup-${arch}.${ext}"
     },
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "artifactName": "${productName}-${version}-macOS-${arch}.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "notarize": true
+    },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
@@ -51,7 +89,7 @@
       "allowElevation": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Prompt Hub",
+      "shortcutName": "Joey Prompthub",
       "deleteAppDataOnUninstall": false
     }
   },
@@ -65,7 +103,8 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.0.3",
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.61.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
@@ -74,13 +113,24 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "axe-core": "^4.12.1",
     "electron": "^41.2.1",
-    "electron-builder": "^26.8.1",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
+    "eslint": "^10.7.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.7.0",
     "jsdom": "^29.0.2",
     "png-to-ico": "^3.0.1",
+    "prettier": "^3.9.5",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.64.0",
     "vite": "^7.3.2",
     "vitest": "^4.1.4"
+  },
+  "overrides": {
+    "brace-expansion": "5.0.8"
   }
 }

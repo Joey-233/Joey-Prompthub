@@ -1,616 +1,231 @@
-// @vitest-environment node
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
-import { describe, expect, it, vi } from 'vitest'
+import Database from 'better-sqlite3'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-vi.mock('better-sqlite3', () => {
-  type PromptRow = {
-    id: string
-    title: string
-    content: string
-    notes: string
-    tags: string
-    params: string
-    preview_image: string
-    is_favorite: number
-    last_used_at: string | null
-    last_generated_at: string | null
-    use_count: number
-    created_at: string
-    updated_at: string
-  }
+import { RELEASE_PROMPT_SEEDS } from '../src/shared/releasePromptSeeds'
+import {
+  BUILT_IN_SEEDANCE2_TEMPLATE_ID,
+  BUILT_IN_SEEDANCE2_TEMPLATE_TITLE,
+  SEEDANCE2_DEFAULT_TEMPLATE_SETTING_KEY
+} from '../src/shared/seedance2Default'
+import { createPromptDatabase, type PromptDatabase } from './db'
 
-  type GenerationRow = {
-    id: string
-    prompt_id: string | null
-    provider_id: string
-    status: 'mocked' | 'success' | 'failed'
-    prompt_title_snapshot: string
-    prompt_snapshot: string
-    image_data: string
-    params: string
-    created_at: string
-  }
+const PNG_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
 
-  type Seedance2TemplateRow = {
-    id: string
-    title: string
-    data: string
-    created_at: string
-    updated_at: string
-  }
+let directory = ''
+let databasePath = ''
+let database: PromptDatabase | null = null
 
-  type Seedance2PresetRow = {
-    id: string
-    name: string
-    tags: string
-    segment: string
-    created_at: string
-    updated_at: string
-  }
-
-  class FakeDatabase {
-    private prompts: PromptRow[] = []
-    private generations: GenerationRow[] = []
-    private seedance2Templates: Seedance2TemplateRow[] = []
-    private seedance2Presets: Seedance2PresetRow[] = []
-    private seedance2Timestamp = 0
-
-    private nextSeedance2Timestamp() {
-      this.seedance2Timestamp += 1
-      return `2026-04-19 00:00:${this.seedance2Timestamp.toString().padStart(2, '0')}`
-    }
-
-    pragma() {}
-
-    exec() {}
-
-    close() {}
-
-    transaction(fn: () => void) {
-      return () => fn()
-    }
-
-    prepare(sql: string) {
-      const normalized = sql.replace(/\s+/g, ' ').trim().toLowerCase()
-
-      if (normalized === 'pragma table_info(prompts)') {
-        // Tests run against the post-migration schema; signal "no `type` column"
-        // so the migration short-circuits without trying to read/drop it.
-        return {
-          all: () => [
-            { name: 'id' },
-            { name: 'title' },
-            { name: 'content' },
-            { name: 'notes' },
-            { name: 'tags' },
-            { name: 'params' },
-            { name: 'preview_image' },
-            { name: 'is_favorite' },
-            { name: 'last_used_at' },
-            { name: 'last_generated_at' },
-            { name: 'use_count' },
-            { name: 'created_at' },
-            { name: 'updated_at' }
-          ]
-        }
-      }
-
-      if (normalized === 'pragma table_info(generations)') {
-        return {
-          all: () => [
-            { name: 'id' },
-            { name: 'prompt_id' },
-            { name: 'provider_id' },
-            { name: 'status' },
-            { name: 'prompt_title_snapshot' },
-            { name: 'prompt_snapshot' },
-            { name: 'image_data' },
-            { name: 'params' },
-            { name: 'created_at' }
-          ]
-        }
-      }
-
-      if (normalized.startsWith('insert into prompts')) {
-        return {
-          run: (params: {
-            id: string
-            title: string
-            content: string
-            notes: string
-            tags: string
-            params: string
-            previewImage: string
-            isFavorite: number
-            lastUsedAt: string | null
-            lastGeneratedAt: string | null
-            useCount: number
-          }) => {
-            this.prompts.push({
-              id: params.id,
-              title: params.title,
-              content: params.content,
-              notes: params.notes,
-              tags: params.tags,
-              params: params.params,
-              preview_image: params.previewImage,
-              is_favorite: params.isFavorite,
-              last_used_at: params.lastUsedAt,
-              last_generated_at: params.lastGeneratedAt,
-              use_count: params.useCount,
-              created_at: '2026-04-19 00:00:00',
-              updated_at: '2026-04-19 00:00:00'
-            })
-          }
-        }
-      }
-
-      if (
-        normalized.startsWith('select') &&
-        normalized.includes('from prompts where id = ?')
-      ) {
-        return {
-          get: (id: string) => this.prompts.find((prompt) => prompt.id === id)
-        }
-      }
-
-      if (
-        normalized.startsWith('select id, title, content, notes, tags, params') &&
-        normalized.includes('from prompts')
-      ) {
-        return {
-          all: (...params: string[]) => {
-            let rows = [...this.prompts]
-            const offset = 0
-
-            if (normalized.includes('(title like ? or content like ?)')) {
-              const search = params[offset]?.toLowerCase().replaceAll('%', '') ?? ''
-              rows = rows.filter(
-                (row) =>
-                  row.title.toLowerCase().includes(search) ||
-                  row.content.toLowerCase().includes(search)
-              )
-            }
-
-            return rows.sort((left, right) => right.updated_at.localeCompare(left.updated_at))
-          }
-        }
-      }
-
-      if (normalized.startsWith('update prompts')) {
-        return {
-          run: (params: {
-            id: string
-            title: string
-            content: string
-            notes: string
-            tags: string
-            params: string
-            previewImage: string
-            isFavorite: number
-            lastUsedAt: string | null
-            lastGeneratedAt: string | null
-            useCount: number
-          }) => {
-            const target = this.prompts.find((prompt) => prompt.id === params.id)
-            if (!target) {
-              return
-            }
-
-            Object.assign(target, {
-              title: params.title,
-              content: params.content,
-              notes: params.notes,
-              tags: params.tags,
-              params: params.params,
-              preview_image: params.previewImage,
-              is_favorite: params.isFavorite,
-              last_used_at: params.lastUsedAt,
-              last_generated_at: params.lastGeneratedAt,
-              use_count: params.useCount,
-              updated_at: '2026-04-19 00:00:01'
-            })
-          }
-        }
-      }
-
-      if (normalized.startsWith('delete from prompts where id = ?')) {
-        return {
-          run: (id: string) => {
-            this.prompts = this.prompts.filter((prompt) => prompt.id !== id)
-          }
-        }
-      }
-
-      if (normalized.startsWith('insert into generations')) {
-        return {
-          run: (params: {
-            id: string
-            promptId: string | null
-            providerId: string
-            status: 'mocked' | 'success' | 'failed'
-            promptTitleSnapshot: string
-            promptSnapshot: string
-            imageData: string
-            params: string
-          }) => {
-            this.generations.push({
-              id: params.id,
-              prompt_id: params.promptId,
-              provider_id: params.providerId,
-              status: params.status,
-              prompt_title_snapshot: params.promptTitleSnapshot,
-              prompt_snapshot: params.promptSnapshot,
-              image_data: params.imageData,
-              params: params.params,
-              created_at: '2026-04-19 00:00:02'
-            })
-          }
-        }
-      }
-
-      if (normalized.includes('from generations where id = ?')) {
-        return {
-          get: (id: string) => this.generations.find((generation) => generation.id === id)
-        }
-      }
-
-      if (normalized.startsWith('select id, prompt_id,')) {
-        return {
-          all: () =>
-            [...this.generations].sort((left, right) =>
-              right.created_at.localeCompare(left.created_at)
-            )
-        }
-      }
-
-      if (normalized.startsWith('select key, value from app_settings')) {
-        return { all: () => [] }
-      }
-
-      if (normalized.startsWith('insert into app_settings')) {
-        return { run: () => undefined }
-      }
-
-      if (
-        normalized ===
-        'insert into seedance2_templates (id, title, data) values (@id, @title, @data)'
-      ) {
-        return {
-          run: (params: { id: string; title: string; data: string }) => {
-            const timestamp = this.nextSeedance2Timestamp()
-            this.seedance2Templates.push({
-              ...params,
-              created_at: timestamp,
-              updated_at: timestamp
-            })
-          }
-        }
-      }
-
-      if (
-        normalized ===
-        "update seedance2_templates set title = @title, data = @data, updated_at = datetime('now') where id = @id"
-      ) {
-        return {
-          run: (params: { id: string; title: string; data: string }) => {
-            const target = this.seedance2Templates.find((row) => row.id === params.id)
-            if (target) {
-              Object.assign(target, params, { updated_at: this.nextSeedance2Timestamp() })
-            }
-          }
-        }
-      }
-
-      if (normalized === 'delete from seedance2_templates where id = ?') {
-        return {
-          run: (id: string) => {
-            this.seedance2Templates = this.seedance2Templates.filter((row) => row.id !== id)
-          }
-        }
-      }
-
-      if (
-        normalized ===
-        'select id, title, data, created_at, updated_at from seedance2_templates where id = ?'
-      ) {
-        return {
-          get: (id: string) => this.seedance2Templates.find((row) => row.id === id)
-        }
-      }
-
-      if (
-        normalized ===
-        'select id, title, data, created_at, updated_at from seedance2_templates order by datetime(updated_at) desc'
-      ) {
-        return {
-          all: () =>
-            [...this.seedance2Templates].sort((left, right) =>
-              right.updated_at.localeCompare(left.updated_at)
-            )
-        }
-      }
-
-      if (
-        normalized ===
-        'insert into seedance2_segment_presets (id, name, tags, segment) values (@id, @name, @tags, @segment)'
-      ) {
-        return {
-          run: (params: { id: string; name: string; tags: string; segment: string }) => {
-            const timestamp = this.nextSeedance2Timestamp()
-            this.seedance2Presets.push({
-              ...params,
-              created_at: timestamp,
-              updated_at: timestamp
-            })
-          }
-        }
-      }
-
-      if (
-        normalized ===
-        "update seedance2_segment_presets set name = @name, tags = @tags, segment = @segment, updated_at = datetime('now') where id = @id"
-      ) {
-        return {
-          run: (params: { id: string; name: string; tags: string; segment: string }) => {
-            const target = this.seedance2Presets.find((row) => row.id === params.id)
-            if (target) {
-              Object.assign(target, params, { updated_at: this.nextSeedance2Timestamp() })
-            }
-          }
-        }
-      }
-
-      if (normalized === 'delete from seedance2_segment_presets where id = ?') {
-        return {
-          run: (id: string) => {
-            this.seedance2Presets = this.seedance2Presets.filter((row) => row.id !== id)
-          }
-        }
-      }
-
-      if (
-        normalized ===
-        'select id, name, tags, segment, created_at, updated_at from seedance2_segment_presets where id = ?'
-      ) {
-        return {
-          get: (id: string) => this.seedance2Presets.find((row) => row.id === id)
-        }
-      }
-
-      if (
-        normalized ===
-        'select id, name, tags, segment, created_at, updated_at from seedance2_segment_presets order by datetime(updated_at) desc'
-      ) {
-        return {
-          all: () =>
-            [...this.seedance2Presets].sort((left, right) =>
-              right.updated_at.localeCompare(left.updated_at)
-            )
-        }
-      }
-
-      throw new Error(`Unhandled SQL in fake better-sqlite3: ${sql}`)
-    }
-  }
-
-  return {
-    default: FakeDatabase
-  }
+beforeEach(() => {
+  directory = mkdtempSync(join(tmpdir(), 'prompthub-db-test-'))
+  databasePath = join(directory, 'prompthub.db')
 })
 
-import { createPromptDatabase } from './db'
+afterEach(() => {
+  database?.close()
+  database = null
+  rmSync(directory, { recursive: true, force: true })
+})
 
-describe('prompt database', () => {
-  it('creates and lists prompts', () => {
-    const db = createPromptDatabase(':memory:')
-    const created = db.prompts.create({
-      content: 'cyberpunk street scene',
-      tags: ['绘图']
-    })
+function open() {
+  database = createPromptDatabase(databasePath)
+  return database
+}
 
-    expect(created.title).toContain('cyberpunk')
-    expect(db.prompts.list()).toHaveLength(1)
-    expect(db.prompts.list()[0].tags).toContain('绘图')
-  })
+describe.skipIf(process.versions.modules !== '145')('prompt database (Electron ABI)', () => {
+  it('seeds release prompts and 默认模板1 only for a fresh installation', () => {
+    const db = open()
 
-  it('persists prompt metadata fields', () => {
-    const db = createPromptDatabase(':memory:')
-    const created = db.prompts.create({
-      title: '收藏提示词',
-      content: 'cinematic portrait',
-      tags: ['绘图'],
-      isFavorite: true,
-      lastUsedAt: '2026-04-19T08:00:00.000Z',
-      lastGeneratedAt: '2026-04-19T08:10:00.000Z',
-      useCount: 3
-    })
-
-    expect(created.isFavorite).toBe(true)
-    expect(created.lastUsedAt).toBe('2026-04-19T08:00:00.000Z')
-    expect(created.lastGeneratedAt).toBe('2026-04-19T08:10:00.000Z')
-    expect(created.useCount).toBe(3)
-  })
-
-  it('stores prompt title snapshots on generations', () => {
-    const db = createPromptDatabase(':memory:')
-    const prompt = db.prompts.create({
-      title: '赛博朋克街景',
-      content: 'cyberpunk street scene',
-      tags: ['绘图']
-    })
-
-    const created = db.generations.create({
-      promptId: prompt.id,
-      providerId: 'mock-image',
-      status: 'mocked',
-      promptTitleSnapshot: prompt.title,
-      promptSnapshot: prompt.content,
-      imageData: '生成结果 1',
-      params: {}
-    })
-
-    expect(created.promptTitleSnapshot).toBe('赛博朋克街景')
-  })
-
-  it('survives 500 prompt inserts and returns them all', () => {
-    const db = createPromptDatabase(':memory:')
-    for (let i = 0; i < 500; i += 1) {
-      db.prompts.create({
-        content: `prompt ${i}`,
-        tags: i % 2 === 0 ? ['绘图'] : ['LLM']
+    expect(db.prompts.listPage({ limit: 20 }).total).toBe(RELEASE_PROMPT_SEEDS.length)
+    expect(db.prompts.listPage({ limit: 20 }).items.map((prompt) => prompt.title)).toEqual(
+      RELEASE_PROMPT_SEEDS.map((prompt) => prompt.title)
+    )
+    expect(db.seedance2.listTemplates()).toEqual([
+      expect.objectContaining({
+        id: BUILT_IN_SEEDANCE2_TEMPLATE_ID,
+        title: BUILT_IN_SEEDANCE2_TEMPLATE_TITLE,
+        data: expect.objectContaining({
+          sections: expect.arrayContaining([
+            expect.objectContaining({ title: '角色与素材锚定' }),
+            expect.objectContaining({ title: '音效设定' })
+          ])
+        })
       })
-    }
-    expect(db.prompts.list()).toHaveLength(500)
-  })
-
-  it('preserves >100KB content without truncation', () => {
-    const db = createPromptDatabase(':memory:')
-    const huge = 'a'.repeat(100_000)
-    const created = db.prompts.create({ content: huge, tags: ['绘图'] })
-    expect(created.content.length).toBe(100_000)
-    const reloaded = db.prompts.list().find((p) => p.id === created.id)
-    expect(reloaded?.content.length).toBe(100_000)
-  })
-
-  it('search treats query as case-insensitive substring', () => {
-    const db = createPromptDatabase(':memory:')
-    db.prompts.create({ content: 'Cyberpunk街景', tags: ['绘图'] })
-    db.prompts.create({ content: 'watercolor floral', tags: ['绘图'] })
-
-    expect(db.prompts.list({ search: 'CYBER' })).toHaveLength(1)
-    expect(db.prompts.list({ search: '街景' })).toHaveLength(1)
-    expect(db.prompts.list({ search: 'nothing-matches-this' })).toHaveLength(0)
-  })
-
-  it('update throws on missing prompt id', () => {
-    const db = createPromptDatabase(':memory:')
-    expect(() => db.prompts.update('does-not-exist', { content: 'x' })).toThrow(
-      /Prompt not found/
+    ])
+    expect(db.settings.list()[SEEDANCE2_DEFAULT_TEMPLATE_SETTING_KEY]).toBe(
+      BUILT_IN_SEEDANCE2_TEMPLATE_ID
     )
   })
 
-  it('delete on missing id is a silent no-op (idempotent)', () => {
-    const db = createPromptDatabase(':memory:')
-    expect(() => db.prompts.delete('does-not-exist')).not.toThrow()
+  it('creates a versioned, integrity-checked database with required pragmas', () => {
+    open().close()
+    database = null
+    const raw = new Database(databasePath, { readonly: true })
+    expect(raw.pragma('user_version', { simple: true })).toBe(3)
+    expect(raw.pragma('integrity_check', { simple: true })).toBe('ok')
+    expect(raw.pragma('foreign_keys', { simple: true })).toBe(1)
+    raw.close()
   })
 
-  it('preserves tag order through round-trip serialization', () => {
-    const db = createPromptDatabase(':memory:')
-    const tags = ['绘图', '风景', '夜景', 'cyberpunk', '街景']
-    const created = db.prompts.create({ content: 'x', tags })
-    expect(created.tags).toEqual(tags)
-  })
-
-  it('persists and clears the custom preview image', () => {
-    const db = createPromptDatabase(':memory:')
-    const dataUrl = 'data:image/jpeg;base64,PREVIEW'
-
-    const created = db.prompts.create({
-      content: 'cyberpunk street scene',
-      tags: ['绘图'],
-      previewImage: dataUrl
+  it('creates, updates, searches and paginates prompts', () => {
+    const db = open()
+    const first = db.prompts.create({
+      title: 'Cinematic portrait',
+      content: 'golden rim light portrait',
+      notes: 'important',
+      tags: ['绘图', '电影'],
+      params: { steps: 28 },
+      isFavorite: true
     })
-    expect(created.previewImage).toBe(dataUrl)
-
-    // 不带 previewImage 的更新不应清掉已有预览图
-    const untouched = db.prompts.update(created.id, { content: 'updated content' })
-    expect(untouched.previewImage).toBe(dataUrl)
-
-    // 显式传空串才清除
-    const cleared = db.prompts.update(created.id, { previewImage: '' })
-    expect(cleared.previewImage).toBe('')
-  })
-
-  it('round-trips arbitrary params JSON', () => {
-    const db = createPromptDatabase(':memory:')
-    const params = {
-      width: 1024,
-      height: 1024,
-      nested: { sampler: 'Euler a', steps: 28 },
-      list: [1, 2, 3]
+    for (let index = 0; index < 220; index += 1) {
+      db.prompts.create({ content: `bulk prompt ${index}`, tags: ['批量'] })
     }
-    const created = db.prompts.create({ content: 'x', tags: ['绘图'], params })
-    expect(created.params).toEqual(params)
+
+    const searched = db.prompts.listPage({ search: 'important', limit: 20 })
+    expect(searched.items.map((item) => item.id)).toEqual([first.id])
+    expect(searched.items[0].notes).toBe('')
+    expect(db.prompts.get(first.id)?.notes).toBe('important')
+
+    const page = db.prompts.listPage({ tag: '批量', limit: 100, offset: 100 })
+    expect(page.items).toHaveLength(100)
+    expect(page.total).toBe(220)
+    expect(page.hasMore).toBe(true)
+
+    const updated = db.prompts.update(first.id, { title: 'Editable title', content: 'updated' })
+    expect(updated.title).toBe('Editable title')
+    expect(updated.content).toBe('updated')
   })
 
-  it('round-trips Seedance2 templates through create, update, list, and delete', () => {
-    const db = createPromptDatabase(':memory:')
-    const data = {
-      sections: [
-        { id: 'intro', title: '开篇总述', kind: 'text' as const, content: 'opening' },
-        { id: 'style', title: '风格', kind: 'text' as const, content: 'cinematic' }
+  it('preserves large content and structured metadata', () => {
+    const db = open()
+    const content = '很长的内容'.repeat(25_000)
+    const prompt = db.prompts.create({
+      content,
+      notes: 'notes',
+      tags: ['绘图', '长文本'],
+      params: { nested: { enabled: true }, array: [1, 'two'] }
+    })
+    expect(db.prompts.get(prompt.id)).toMatchObject({
+      content,
+      notes: 'notes',
+      tags: ['绘图', '长文本'],
+      params: { nested: { enabled: true }, array: [1, 'two'] }
+    })
+  })
+
+  it('moves image payloads out of SQLite and serves reversible asset URLs', () => {
+    const db = open()
+    const prompt = db.prompts.create({ content: 'image', previewImages: [PNG_DATA_URL] })
+    expect(prompt.previewImage).toMatch(/^prompthub-asset:\/\/local\/[a-f0-9]{64}\.png$/)
+    expect(db.assets.toDataUrl(prompt.previewImage!)).toBe(PNG_DATA_URL)
+
+    const raw = new Database(databasePath, { readonly: true })
+    const row = raw.prepare('SELECT preview_image FROM prompts WHERE id = ?').get(prompt.id) as {
+      preview_image: string
+    }
+    expect(row.preview_image).not.toContain('base64')
+    raw.close()
+  })
+
+  it('stores generation runs transactionally and keeps history after prompt deletion', () => {
+    const db = open()
+    const prompt = db.prompts.create({ content: 'source' })
+    const records = db.generations.createBatch({
+      runId: 'run-1',
+      records: [
+        {
+          promptId: prompt.id,
+          providerId: 'mock-image',
+          status: 'success',
+          promptTitleSnapshot: prompt.title,
+          promptSnapshot: prompt.content,
+          imageData: PNG_DATA_URL,
+          durationMs: 120,
+          params: { count: 2 }
+        },
+        {
+          promptId: prompt.id,
+          providerId: 'mock-image',
+          status: 'success',
+          promptTitleSnapshot: prompt.title,
+          promptSnapshot: prompt.content,
+          imageData: PNG_DATA_URL,
+          durationMs: 120
+        }
       ]
-    }
-
-    const created = db.seedance2.createTemplate({ title: 'Storyboard', data })
-    const second = db.seedance2.createTemplate({ title: 'Second storyboard', data })
-    expect(created).toMatchObject({ title: 'Storyboard', data })
-    expect(db.seedance2.listTemplates().map((template) => template.id)).toEqual([
-      second.id,
-      created.id
-    ])
-
-    const updatedData = { sections: [data.sections[0], { ...data.sections[1], content: 'documentary' }] }
-    const updated = db.seedance2.updateTemplate(created.id, {
-      title: 'Updated storyboard',
-      data: updatedData
     })
-    expect(updated).toMatchObject({ title: 'Updated storyboard', data: updatedData })
-    expect(db.seedance2.listTemplates().map((template) => template.id)).toEqual([
-      created.id,
-      second.id
-    ])
+    expect(records).toHaveLength(2)
+    expect(records.every((record) => record.runId === 'run-1')).toBe(true)
+    expect(db.generations.listPage({ limit: 1 })).toMatchObject({ total: 2, hasMore: true })
 
-    db.seedance2.deleteTemplate(created.id)
-    db.seedance2.deleteTemplate(second.id)
-    expect(db.seedance2.listTemplates()).toEqual([])
+    db.prompts.delete(prompt.id)
+    expect(db.generations.list()[0].promptId).toBeNull()
   })
 
-  it('round-trips Seedance2 segment presets through create, update, list, and delete', () => {
-    const db = createPromptDatabase(':memory:')
-    const segment = {
-      id: 'segment-1',
-      timeLabel: '0-3s',
-      shotType: 'wide',
-      description: 'A city wakes up',
-      dialog: ''
-    }
+  it('detects corrupted JSON instead of silently replacing it', () => {
+    const db = open()
+    const prompt = db.prompts.create({ content: 'source' })
+    const raw = new Database(databasePath)
+    raw.prepare("UPDATE prompts SET tags = 'not-json' WHERE id = ?").run(prompt.id)
+    raw.close()
+    expect(() => db.prompts.get(prompt.id)).toThrow(/已损坏/)
+  })
 
-    const created = db.seedance2.createPreset({
-      name: 'Opening',
-      tags: ['city', 'wide'],
-      segment
+  it('creates a pre-migration backup for an existing unversioned database', () => {
+    const legacy = new Database(databasePath)
+    legacy.exec(`
+      CREATE TABLE prompts (
+        id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL,
+        tags TEXT NOT NULL DEFAULT '[]', params TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `)
+    legacy
+      .prepare('INSERT INTO prompts (id, title, content) VALUES (?, ?, ?)')
+      .run('legacy', 'Legacy', 'content')
+    legacy.close()
+
+    const db = open()
+    expect(db.prompts.get('legacy')?.title).toBe('Legacy')
+    expect(db.prompts.listPage({ limit: 20 }).total).toBe(1)
+    expect(db.seedance2.listTemplates()).toEqual([])
+    expect(readdirSync(directory).some((name) => name.includes('.before-v3-from-v0-'))).toBe(true)
+  })
+
+  it('round-trips Seedance2 templates and presets', () => {
+    const db = open()
+    const template = db.seedance2.createTemplate({
+      title: 'Template',
+      data: { sections: [{ id: 'intro', title: '开场', kind: 'text', content: 'hello' }] }
     })
-    const second = db.seedance2.createPreset({
-      name: 'Second opening',
-      tags: ['city'],
-      segment
+    expect(db.seedance2.listTemplates()).toContainEqual(
+      expect.objectContaining({ id: template.id, title: 'Template' })
+    )
+    const preset = db.seedance2.createPreset({
+      name: 'Shot',
+      tags: ['action'],
+      segment: {
+        id: 'shot-1',
+        timeLabel: '0-3s',
+        shotType: 'wide',
+        description: 'move',
+        dialog: ''
+      }
     })
-    expect(created).toMatchObject({ name: 'Opening', tags: ['city', 'wide'], segment })
-    expect(db.seedance2.listPresets().map((preset) => preset.id)).toEqual([
-      second.id,
-      created.id
+    expect(db.seedance2.listPresets()[0]).toMatchObject({ id: preset.id, tags: ['action'] })
+    db.seedance2.deleteTemplate(template.id)
+    db.seedance2.deletePreset(preset.id)
+    expect(db.seedance2.listTemplates()).toEqual([
+      expect.objectContaining({
+        id: BUILT_IN_SEEDANCE2_TEMPLATE_ID,
+        title: BUILT_IN_SEEDANCE2_TEMPLATE_TITLE
+      })
     ])
-
-    const updatedSegment = { ...segment, shotType: 'close-up' }
-    const updated = db.seedance2.updatePreset(created.id, {
-      name: 'Opening close-up',
-      tags: ['city'],
-      segment: updatedSegment
-    })
-    expect(updated).toMatchObject({
-      name: 'Opening close-up',
-      tags: ['city'],
-      segment: updatedSegment
-    })
-    expect(db.seedance2.listPresets().map((preset) => preset.id)).toEqual([
-      created.id,
-      second.id
-    ])
-
-    db.seedance2.deletePreset(created.id)
-    db.seedance2.deletePreset(second.id)
     expect(db.seedance2.listPresets()).toEqual([])
   })
 })

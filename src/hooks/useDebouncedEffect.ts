@@ -20,5 +20,7 @@ export function useDebouncedEffect(
     return () => {
       window.clearTimeout(timeoutId)
     }
+    // The caller owns this hook's dependency list, mirroring React's built-in effects.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, dependencies)
 }

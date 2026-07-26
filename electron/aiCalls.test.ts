@@ -11,7 +11,7 @@ vi.mock('./secretStore', () => ({
   }
 }))
 
-import { callAiOptimize, callAiVision, callOpenaiImage, callSdWebui } from './aiCalls'
+import { callAiOptimize, callAiVision, checkProviderConnection } from './aiCalls'
 import { secretStore } from './secretStore'
 
 type FakeDb = Parameters<typeof callAiOptimize>[0]
@@ -28,6 +28,13 @@ function makeDb(settings: Record<string, unknown> = {}): FakeDb {
   } as unknown as FakeDb
 }
 
+function jsonResponse(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'content-type': 'application/json' }
+  })
+}
+
 const fetchMock = vi.fn()
 
 beforeEach(() => {
@@ -40,538 +47,136 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('callAiOptimize', () => {
-  it('throws when API key is missing', async () => {
+describe('text AI calls', () => {
+  it('requires an API key before making a request', async () => {
     vi.mocked(secretStore.reveal).mockReturnValue(null)
-    await expect(
-      callAiOptimize(makeDb({}), { content: 'x', direction: '增强细节' })
-    ).rejects.toThrow(/API Key/)
+
+    await expect(callAiOptimize(makeDb(), { content: 'x', direction: '增强细节' })).rejects.toThrow(
+      'API Key'
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('uses the preset baseURL when settings.ai_base_url is empty', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: 'optimized' } }] })
+  it('uses a preset endpoint and returns the assistant content', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ choices: [{ message: { content: '优化结果' } }] }))
+
+    const result = await callAiOptimize(makeDb({ ai_preset: 'deepseek' }), {
+      content: '原始提示词',
+      direction: '增强细节'
     })
-    const db = makeDb({ ai_preset: 'openai' })
-    const result = await callAiOptimize(db, { content: 'hello', direction: '增强细节' })
-    expect(result).toBe('optimized')
-    expect(fetchMock.mock.calls[0][0]).toBe('https://api.openai.com/v1/chat/completions')
-    const init = fetchMock.mock.calls[0][1]
-    expect(init.headers.Authorization).toBe('Bearer sk-test')
-    expect(init.headers['Content-Type']).toBe('application/json')
+
+    expect(result).toBe('优化结果')
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.deepseek.com/chat/completions')
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer sk-test')
   })
 
-  it('strips trailing slashes from user-supplied baseURL', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: 'ok' } }] })
-    })
-    const db = makeDb({
-      ai_preset: 'custom',
-      ai_base_url: 'https://example.com/v1//',
-      ai_model: 'gpt-4'
-    })
-    await callAiOptimize(db, { content: 'hello', direction: '精简表达' })
-    expect(fetchMock.mock.calls[0][0]).toBe('https://example.com/v1/chat/completions')
-  })
+  it('normalizes a custom endpoint and honors a model override', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ choices: [{ message: { content: 'ok' } }] }))
 
-  it('passes through 自定义指令 verbatim in the user message', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: 'ok' } }] })
-    })
-    const db = makeDb({ ai_preset: 'openai' })
-    await callAiOptimize(db, {
-      content: 'x',
-      direction: '自定义指令',
-      customInstruction: '请改成英文'
-    })
+    await callAiOptimize(
+      makeDb({
+        ai_preset: 'custom',
+        ai_base_url: 'https://gateway.example.com/v1///',
+        ai_model: 'saved-model'
+      }),
+      {
+        content: 'x',
+        direction: '自定义指令',
+        customInstruction: '请改成英文',
+        model: 'override-model'
+      }
+    )
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://gateway.example.com/v1/chat/completions')
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.model).toBe('override-model')
     expect(body.messages[1].content).toContain('请改成英文')
   })
 
-  it('uses generic fallback when 自定义指令 is empty', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: 'ok' } }] })
-    })
-    const db = makeDb({ ai_preset: 'openai' })
-    await callAiOptimize(db, {
+  it('uses the generic custom instruction when the input is blank', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ choices: [{ message: { content: 'ok' } }] }))
+
+    await callAiOptimize(makeDb({ ai_preset: 'doubao' }), {
       content: 'x',
       direction: '自定义指令',
       customInstruction: '   '
     })
+
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
     expect(body.messages[1].content).toContain('请优化这个提示词的表达质量')
   })
 
-  it('surfaces HTTP errors with status and body excerpt', async () => {
-    fetchMock.mockResolvedValue({
-      ok: false,
-      status: 401,
-      text: async () => 'Invalid API Key'
-    })
-    const db = makeDb({ ai_preset: 'openai' })
+  it('maps provider failures to a useful message', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ error: 'invalid key' }, 401))
+
     await expect(
-      callAiOptimize(db, { content: 'x', direction: '增强细节' })
-    ).rejects.toThrow(/401.*Invalid API Key/)
-  })
-
-  it('truncates error body excerpts to 240 chars', async () => {
-    const huge = 'X'.repeat(10_000)
-    fetchMock.mockResolvedValue({
-      ok: false,
-      status: 500,
-      text: async () => huge
-    })
-    const db = makeDb({ ai_preset: 'openai' })
-    await callAiOptimize(db, { content: 'x', direction: '增强细节' }).catch((err: Error) => {
-      // Error message = `AI 调用失败 (500): <240 chars>` — keep some slack for the prefix.
-      expect(err.message.length).toBeLessThan(280)
-    })
-  })
-
-  it('returns empty string when response has no choices', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({})
-    })
-    const db = makeDb({ ai_preset: 'openai' })
-    const result = await callAiOptimize(db, { content: 'x', direction: '增强细节' })
-    expect(result).toBe('')
-  })
-
-  it('honors model override when caller provides one', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: 'x' } }] })
-    })
-    const db = makeDb({ ai_preset: 'deepseek', ai_model: 'deepseek-chat' })
-    await callAiOptimize(db, {
-      content: 'x',
-      direction: '增强细节',
-      model: 'deepseek-reasoner'
-    })
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body.model).toBe('deepseek-reasoner')
-  })
-
-  it('hits the correct baseURL for every built-in preset', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: 'x' } }] })
-    })
-    const expected: Record<string, string> = {
-      openai: 'https://api.openai.com/v1',
-      anthropic: 'https://api.anthropic.com/v1',
-      deepseek: 'https://api.deepseek.com/v1',
-      kimi: 'https://api.moonshot.cn/v1',
-      glm: 'https://open.bigmodel.cn/api/paas/v4',
-      qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-      doubao: 'https://ark.cn-beijing.volces.com/api/v3',
-      gemini: 'https://generativelanguage.googleapis.com/v1beta/openai'
-    }
-
-    for (const [preset, baseURL] of Object.entries(expected)) {
-      fetchMock.mockClear()
-      await callAiOptimize(makeDb({ ai_preset: preset }), {
+      callAiOptimize(makeDb({ ai_preset: 'doubao' }), {
         content: 'x',
         direction: '增强细节'
       })
-      expect(fetchMock.mock.calls[0][0]).toBe(`${baseURL}/chat/completions`)
-    }
+    ).rejects.toThrow('认证失败')
   })
 
-  it('handles very long prompts (8KB+) without truncation', async () => {
-    const longContent = 'cyberpunk street scene '.repeat(400)
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: 'ok' } }] })
-    })
-    await callAiOptimize(makeDb({ ai_preset: 'openai' }), {
-      content: longContent,
-      direction: '增强细节'
-    })
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body.messages[1].content).toContain(longContent)
+  it('returns an empty string when the provider omits choices', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({}))
+
+    await expect(
+      callAiOptimize(makeDb({ ai_preset: 'doubao' }), {
+        content: 'x',
+        direction: '增强细节'
+      })
+    ).resolves.toBe('')
   })
 })
 
-describe('callAiVision', () => {
-  const IMAGE = 'data:image/jpeg;base64,FAKEIMG'
+describe('vision calls through the text API', () => {
+  const imageDataUrl = 'data:image/jpeg;base64,FAKE'
 
-  it('rejects non-image data URLs before any network call', async () => {
+  it('rejects invalid image input before network access', async () => {
     await expect(
-      callAiVision(makeDb({ ai_preset: 'openai' }), { imageDataUrl: 'not-a-data-url' })
-    ).rejects.toThrow(/图片数据格式不正确/)
+      callAiVision(makeDb({ ai_preset: 'doubao' }), { imageDataUrl: 'not-an-image' })
+    ).rejects.toThrow('图片数据格式不正确')
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('throws when API key is missing', async () => {
-    vi.mocked(secretStore.reveal).mockReturnValue(null)
-    await expect(
-      callAiVision(makeDb({}), { imageDataUrl: IMAGE })
-    ).rejects.toThrow(/API Key/)
-  })
+  it('uses the configured text endpoint, model and key', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ choices: [{ message: { content: '图片描述' } }] }))
 
-  it('sends an OpenAI-compatible multimodal payload with the image as image_url', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: 'a neon street at night' } }] })
-    })
-
-    const result = await callAiVision(makeDb({ ai_preset: 'openai' }), {
-      imageDataUrl: IMAGE
-    })
-
-    expect(result).toBe('a neon street at night')
-    expect(fetchMock.mock.calls[0][0]).toBe('https://api.openai.com/v1/chat/completions')
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    const userContent = body.messages[1].content
-    expect(Array.isArray(userContent)).toBe(true)
-    expect(userContent[0].type).toBe('text')
-    expect(userContent[0].text).toContain('反推')
-    expect(userContent[1]).toEqual({ type: 'image_url', image_url: { url: IMAGE } })
-  })
-
-  it('uses caller-provided instruction and model override verbatim', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: 'ok' } }] })
-    })
-
-    await callAiVision(makeDb({ ai_preset: 'qwen', ai_model: 'qwen-plus' }), {
-      imageDataUrl: IMAGE,
-      instruction: '用英文描述这张图',
-      model: 'qwen-vl-plus'
-    })
-
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body.model).toBe('qwen-vl-plus')
-    expect(body.messages[1].content[0].text).toBe('用英文描述这张图')
-  })
-
-  it('surfaces HTTP errors so the UI can hint about vision-capable models', async () => {
-    fetchMock.mockResolvedValue({
-      ok: false,
-      status: 400,
-      text: async () => 'model does not support image input'
-    })
-
-    await expect(
-      callAiVision(makeDb({ ai_preset: 'deepseek' }), { imageDataUrl: IMAGE })
-    ).rejects.toThrow(/400.*image input/)
-  })
-
-  it('follow mode rides the AI service endpoint but swaps in vision_model', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: 'ok' } }] })
-    })
-
-    await callAiVision(
+    const result = await callAiVision(
       makeDb({
-        ai_preset: 'openai',
-        ai_model: 'gpt-4.1-mini',
-        vision_preset: 'follow',
-        vision_model: 'gpt-4o'
+        ai_preset: 'doubao',
+        ai_model: 'doubao-seed-2.1-pro'
       }),
-      { imageDataUrl: IMAGE }
+      { imageDataUrl }
     )
 
-    expect(fetchMock.mock.calls[0][0]).toBe('https://api.openai.com/v1/chat/completions')
+    expect(result).toBe('图片描述')
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body.model).toBe('gpt-4o')
-  })
-
-  it('a dedicated vision preset uses its own baseURL and vision.apiKey', async () => {
-    vi.mocked(secretStore.reveal).mockImplementation((key: string) =>
-      key === 'vision.apiKey' ? 'sk-vision' : 'sk-text'
-    )
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: 'ok' } }] })
+    expect(body.model).toBe('doubao-seed-2.1-pro')
+    expect(body.messages[1].content[1]).toEqual({
+      type: 'image_url',
+      image_url: { url: imageDataUrl }
     })
-
-    await callAiVision(
-      makeDb({
-        ai_preset: 'deepseek',
-        vision_preset: 'qwen',
-        vision_model: 'qwen-vl-max'
-      }),
-      { imageDataUrl: IMAGE }
-    )
-
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
-    )
-    const init = fetchMock.mock.calls[0][1]
-    expect(init.headers.Authorization).toBe('Bearer sk-vision')
-    expect(JSON.parse(init.body).model).toBe('qwen-vl-max')
-  })
-
-  it('falls back to ai.apiKey when no dedicated vision key is stored', async () => {
-    vi.mocked(secretStore.reveal).mockImplementation((key: string) =>
-      key === 'vision.apiKey' ? null : 'sk-shared'
-    )
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: 'ok' } }] })
-    })
-
-    await callAiVision(
-      makeDb({ vision_preset: 'glm', vision_model: 'glm-4v-plus' }),
-      { imageDataUrl: IMAGE }
-    )
-
-    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer sk-shared')
-  })
-
-  it('throws a vision-specific key error when neither key exists', async () => {
-    vi.mocked(secretStore.reveal).mockReturnValue(null)
-
-    await expect(
-      callAiVision(makeDb({ vision_preset: 'qwen' }), { imageDataUrl: IMAGE })
-    ).rejects.toThrow(/识图 API Key/)
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer sk-test')
   })
 })
 
-describe('callOpenaiImage', () => {
-  it('throws when API key is missing', async () => {
-    vi.mocked(secretStore.reveal).mockReturnValue(null)
-    await expect(
-      callOpenaiImage(makeDb({}), {
-        prompt: 'x',
-        params: { width: 1024, height: 1024, count: 1 }
-      })
-    ).rejects.toThrow(/API Key/)
-  })
+describe('connection check', () => {
+  it('returns sorted unique model IDs', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ data: [{ id: 'model-z' }, { id: 'model-a' }, { id: 'model-z' }, {}] })
+    )
 
-  it('issues a single call for gpt-image-1 and decodes b64 results', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        data: [{ b64_json: 'AAA' }, { b64_json: 'BBB' }]
-      })
-    })
-    const outcome = await callOpenaiImage(makeDb({ image_model: 'gpt-image-1' }), {
-      prompt: 'cat',
-      params: { width: 1024, height: 1024, count: 2 }
-    })
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(outcome.status).toBe('success')
-    expect(outcome.results).toHaveLength(2)
-    expect(outcome.results[0].imageData).toBe('data:image/png;base64,AAA')
-  })
-
-  it('loops calls for DALL·E 3 since each call only returns one image', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ b64_json: 'X' }] })
-    })
-    const outcome = await callOpenaiImage(makeDb({ image_model: 'dall-e-3' }), {
-      prompt: 'cat',
-      params: { width: 1024, height: 1024, count: 3 }
-    })
-    expect(fetchMock).toHaveBeenCalledTimes(3)
-    expect(outcome.results).toHaveLength(3)
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body.response_format).toBe('b64_json')
-    expect(body.quality).toBe('standard') // 默认 medium → standard
-  })
-
-  it('maps quality=high to hd for DALL·E 3', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ b64_json: 'X' }] })
-    })
-    await callOpenaiImage(makeDb({ image_model: 'dall-e-3' }), {
-      prompt: 'cat',
-      params: { width: 1024, height: 1024, count: 1, quality: 'high' }
-    })
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body.quality).toBe('hd')
-  })
-
-  it('keeps quality as-is for gpt-image-1 (low/medium/high passthrough)', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ b64_json: 'X' }] })
-    })
-    await callOpenaiImage(makeDb({ image_model: 'gpt-image-1' }), {
-      prompt: 'cat',
-      params: { width: 1024, height: 1024, count: 1, quality: 'high' }
-    })
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body.quality).toBe('high')
-  })
-
-  it('falls back to first size when the requested one does not match preset', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ b64_json: 'X' }] })
-    })
-    await callOpenaiImage(makeDb({ image_model: 'gpt-image-1' }), {
-      prompt: 'cat',
-      params: { width: 999, height: 999, count: 1 }
-    })
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body.size).toBe('1024x1024')
-  })
-
-  it('clamps count to max 4', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        data: [
-          { b64_json: 'A' },
-          { b64_json: 'B' },
-          { b64_json: 'C' },
-          { b64_json: 'D' }
-        ]
-      })
-    })
-    await callOpenaiImage(makeDb({ image_model: 'gpt-image-1' }), {
-      prompt: 'cat',
-      params: { width: 1024, height: 1024, count: 99 }
-    })
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body.n).toBe(4)
-  })
-
-  it('uses Azure / custom baseURL when image_base_url is set', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ b64_json: 'X' }] })
-    })
-    await callOpenaiImage(
+    const result = await checkProviderConnection(
       makeDb({
-        image_preset: 'openai-compatible-image',
-        image_base_url: 'https://my-azure.example.com/openai/'
+        ai_preset: 'custom',
+        ai_base_url: 'https://connection-check.example.com/v1',
+        ai_model: 'model-a'
       }),
-      {
-        prompt: 'cat',
-        params: { width: 1024, height: 1024, count: 1 }
-      }
+      'ai'
     )
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      'https://my-azure.example.com/openai/images/generations'
-    )
-  })
 
-  it('surfaces HTTP errors with status and body excerpt', async () => {
-    fetchMock.mockResolvedValue({
-      ok: false,
-      status: 429,
-      text: async () => 'Rate limit exceeded'
-    })
-    await expect(
-      callOpenaiImage(makeDb({ image_model: 'gpt-image-1' }), {
-        prompt: 'x',
-        params: { width: 1024, height: 1024, count: 1 }
-      })
-    ).rejects.toThrow(/429.*Rate limit/)
-  })
-
-  it('reports failed status when response has no images', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [] })
-    })
-    const outcome = await callOpenaiImage(makeDb({ image_model: 'gpt-image-1' }), {
-      prompt: 'x',
-      params: { width: 1024, height: 1024, count: 1 }
-    })
-    expect(outcome.status).toBe('failed')
-  })
-
-  it('passes through url-only responses when b64 is missing', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ url: 'https://example.com/img.png' }] })
-    })
-    const outcome = await callOpenaiImage(makeDb({ image_model: 'gpt-image-1' }), {
-      prompt: 'x',
-      params: { width: 1024, height: 1024, count: 1 }
-    })
-    expect(outcome.results[0].imageData).toBe('https://example.com/img.png')
-  })
-})
-
-describe('callSdWebui', () => {
-  it('throws when base URL is missing', async () => {
-    await expect(
-      callSdWebui(makeDb({}), { prompt: 'x', params: { width: 512, height: 512 } })
-    ).rejects.toThrow(/SD WebUI 服务地址/)
-  })
-
-  it('posts to /sdapi/v1/txt2img and strips trailing slashes', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ images: ['IMG'] })
-    })
-    await callSdWebui(makeDb({ image_base_url: 'http://127.0.0.1:7860/' }), {
-      prompt: 'forest',
-      params: { width: 768, height: 512, steps: 20, sampler: 'Euler a', count: 1 }
-    })
-    expect(fetchMock.mock.calls[0][0]).toBe('http://127.0.0.1:7860/sdapi/v1/txt2img')
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body.sampler_name).toBe('Euler a')
-    expect(body.steps).toBe(20)
-  })
-
-  it('clamps batch_size to max 8', async () => {
-    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ images: [] }) })
-    await callSdWebui(makeDb({ image_base_url: 'http://127.0.0.1:7860' }), {
-      prompt: 'x',
-      params: { width: 512, height: 512, count: 99 }
-    })
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body.batch_size).toBe(8)
-  })
-
-  it('applies default steps and sampler when not provided', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ images: ['X'] })
-    })
-    await callSdWebui(makeDb({ image_base_url: 'http://127.0.0.1:7860' }), {
-      prompt: 'x',
-      params: { width: 512, height: 512 }
-    })
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body.steps).toBe(28)
-    expect(body.sampler_name).toBe('DPM++ 2M Karras')
-  })
-
-  it('accepts both raw b64 and data: URLs from WebUI responses', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ images: ['RAW', 'data:image/png;base64,READY'] })
-    })
-    const outcome = await callSdWebui(
-      makeDb({ image_base_url: 'http://127.0.0.1:7860' }),
-      {
-        prompt: 'x',
-        params: { width: 512, height: 512, count: 2 }
-      }
-    )
-    expect(outcome.results[0].imageData).toBe('data:image/png;base64,RAW')
-    expect(outcome.results[1].imageData).toBe('data:image/png;base64,READY')
-  })
-
-  it('surfaces non-2xx with status and body excerpt', async () => {
-    fetchMock.mockResolvedValue({
-      ok: false,
-      status: 500,
-      text: async () => 'CUDA out of memory'
-    })
-    await expect(
-      callSdWebui(makeDb({ image_base_url: 'http://127.0.0.1:7860' }), {
-        prompt: 'x',
-        params: { width: 512, height: 512 }
-      })
-    ).rejects.toThrow(/500.*CUDA/)
+    expect(result.models).toEqual(['model-a', 'model-z'])
+    expect(result.message).toContain('2 个模型')
   })
 })
