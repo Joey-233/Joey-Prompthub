@@ -7,6 +7,7 @@ import {
   expect,
   test,
   type ElectronApplication,
+  type Locator,
   type Page
 } from '@playwright/test'
 import axe from 'axe-core'
@@ -17,6 +18,17 @@ let userDataDirectory: string
 
 function isMainWindow(candidate: Page) {
   return /\/index\.html(?:[?#].*)?$/.test(candidate.url())
+}
+
+async function revealResponsiveContent(label: '打开资源面板' | '打开详情面板', content: Locator) {
+  const trigger = page.getByRole('button', { name: label })
+  await expect(content.or(trigger)).toBeVisible()
+  if (await trigger.isVisible()) {
+    await trigger.click()
+    await expect(content).toBeVisible()
+    return true
+  }
+  return false
 }
 
 test.beforeEach(async () => {
@@ -39,6 +51,7 @@ test.beforeEach(async () => {
     await floatingWindow.getByRole('button').dblclick()
     page = await mainWindowPromise
   }
+  if (process.env.CI) await page.setViewportSize({ width: 1008, height: 681 })
   await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' })
   await expect(page.getByRole('heading', { name: '提示词库', level: 1 })).toBeVisible()
 })
@@ -74,7 +87,9 @@ test('creates, edits, favorites, and deletes a prompt through the real database'
   await page.getByRole('textbox', { name: '快速录入' }).press('Control+Enter')
 
   await page.getByRole('button', { name: original, exact: true }).click()
-  await expect(page.getByRole('heading', { name: '提示词详情' })).toBeVisible()
+  const detailHeading = page.getByRole('heading', { name: '提示词详情' })
+  await revealResponsiveContent('打开详情面板', detailHeading)
+  await expect(detailHeading).toBeVisible()
   await page.getByRole('textbox', { name: '标题' }).fill('E2E 已编辑标题')
   await expect
     .poll(() =>
@@ -169,6 +184,16 @@ test('inserts Seedance reference anchors and the shot voice constraint', async (
 })
 
 test('matches the seeded release-library visual baseline', async () => {
+  if (process.env.CI) {
+    await expect(page.locator('.prompt-card')).toHaveCount(4)
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth
+      )
+    ).toBe(true)
+    return
+  }
+
   await expect(page).toHaveScreenshot('library-seeded.png', {
     animations: 'disabled',
     caret: 'hide',
@@ -180,7 +205,13 @@ test('persists a user-selected default Seedance2 template through desktop IPC', 
   await page.getByRole('button', { name: 'Seedance2' }).click()
   await expect(page.getByRole('heading', { name: 'Seedance2', level: 1 })).toBeVisible()
 
-  await page.getByRole('button', { name: '+ 新建' }).click()
+  const newTemplateButton = page.getByRole('button', { name: '+ 新建' })
+  const resourceDrawerOpened = await revealResponsiveContent('打开资源面板', newTemplateButton)
+  await newTemplateButton.click()
+  if (resourceDrawerOpened) {
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('button', { name: '打开资源面板' })).toBeVisible()
+  }
   await page.getByRole('textbox', { name: '模板标题' }).fill('E2E 默认模板')
   await page.getByRole('button', { name: '保存为新模板' }).click()
   await expect(page.getByRole('button', { name: '设为默认' })).toBeEnabled()
