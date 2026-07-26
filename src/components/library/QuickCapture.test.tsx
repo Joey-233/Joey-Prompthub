@@ -172,9 +172,9 @@ describe('QuickCapture tag entry', () => {
       .filter((button) => button.className.includes('capture-suggestion'))
     const suggestionLabels = suggestionButtons.map((button) => button.textContent)
 
-    // Tags with count=2 (风景, 人物) come before count=1 (常用); among count=2,
-    // pinyin sorts 风景(f) before 人物(r). Type tags 绘图/LLM are excluded
-    // from the suggestion row since they live in the dedicated type chips.
+    // Tags with count=2 (风景, 人物) come before count=1 (常用); equal counts keep
+    // their first-seen order so results do not depend on the host's ICU locale.
+    // Type tags 绘图/LLM live in the dedicated type chips and are excluded here.
     expect(suggestionLabels).toEqual(['风景', '人物', '常用'])
 
     await user.click(screen.getByRole('button', { name: '添加已有标签 风景' }))

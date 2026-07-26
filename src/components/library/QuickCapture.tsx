@@ -27,7 +27,7 @@ function rankSuggestions(
   const excludeSet = new Set(exclude)
   return Array.from(counts.entries())
     .filter(([tag]) => !excludeSet.has(tag))
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .sort((a, b) => b[1] - a[1])
     .slice(0, MAX_SUGGESTIONS)
     .map(([tag]) => tag)
 }

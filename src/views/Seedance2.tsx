@@ -324,6 +324,7 @@ export function Seedance2() {
     }
 
     requestAnimationFrame(() => {
+      if (lastActiveSegmentId.current !== target.id) return
       const dialog = refs.current[sectionId]?.querySelector<HTMLTextAreaElement>(
         `[data-shot-dialog-id="${target.id}"]`
       )
