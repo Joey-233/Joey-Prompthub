@@ -601,6 +601,9 @@
         transition: all 0.2s;
         position: relative;
       }
+      .dl-card.github {
+        background: linear-gradient(120deg, #f7f1e1, #f3eedb);
+      }
       .dl-card:hover {
         transform: translateY(-2px);
         border-color: var(--line-2);
@@ -654,15 +657,22 @@
         font-size: 14px;
         font-weight: 500;
         border: none;
+        cursor: pointer;
+        text-decoration: none;
       }
       .dl-btn.alt {
         background: var(--blue-soft);
         color: var(--blue-deep);
         border: 1px solid #d8e2f3;
       }
+      .dl-btn:disabled {
+        background: #d9d5cc;
+        color: #77736b;
+        cursor: not-allowed;
+        opacity: 0.82;
+      }
       .dl-card.full {
         grid-column: span 2;
-        background: linear-gradient(120deg, #f7f1e1, #f3eedb);
       }
       .dl-card.full h4 {
         font-size: 18px;
@@ -785,6 +795,19 @@
       @media (max-width: 620px) {
         .wrap {
           padding: 18px 16px 60px;
+        }
+        .chrome {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .nav {
+          width: 100%;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+        .pill {
+          padding: 7px 10px;
         }
         .feat-grid {
           grid-template-columns: 1fr;
@@ -1003,7 +1026,8 @@
             <h2>免费下载，<em>无内购</em>，<br />数据永远是你自己的。</h2>
             <p>
               Joey Prompthub 是完全免费的开源软件。安装包约 100MB，桌面占用极低，开机自启可选。
-              全新安装包含 4 条起始提示词和“默认模板1”，当前正式支持 Windows 10+。
+              全新安装包含 4 条起始提示词和“默认模板1”。Windows 与 macOS
+              安装包发布后会自动显示在右侧。
             </p>
             <div class="dl-meta">
               <span
@@ -1015,9 +1039,25 @@
             </div>
           </div>
           <div class="dl-cards">
+            <div class="dl-card full github">
+              <div class="os" style="background: #e7dec8">GH</div>
+              <h4>GitHub 项目主页</h4>
+              <div class="sz">源代码 · Issues · Releases · MIT License</div>
+              <div class="release-status">
+                查看源代码、版本记录和开发进度。如果 Joey Prompthub 帮到你，欢迎点个 Star。
+              </div>
+              <a
+                class="dl-btn alt"
+                href="https://github.com/Joey-233/Joey-Prompthub"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                打开 GitHub <span>↗</span>
+              </a>
+            </div>
             <div class="dl-card">
               <div class="os">Win</div>
-              <h4>Windows</h4>
+              <h4>Windows 最新版</h4>
               <div class="sz" id="windows-release-size">.exe · x64 · 正在检查最新版</div>
               <div class="release-status" id="windows-release-status" role="status">
                 正在读取 GitHub 最新正式版…
@@ -1026,41 +1066,28 @@
                 class="dl-btn"
                 id="windows-download"
                 data-platform="Windows"
-                data-url="https://github.com/Joey-233/Joey-Prompthub/releases/latest"
                 onclick="startDownload(this)"
+                disabled
               >
-                获取最新正式版 <span>↓</span>
+                正在检查 <span>…</span>
               </button>
             </div>
-            <div class="dl-card full">
-              <div class="os" style="background: #e7dec8">src</div>
-              <h4>源代码</h4>
-              <div class="sz">GitHub · MIT License</div>
-              <div
-                class="src-pitch"
-                style="
-                  margin: 6px 0 14px;
-                  font-size: 13px;
-                  line-height: 1.6;
-                  color: rgba(60, 60, 60, 0.72);
-                  letter-spacing: 0.02em;
-                "
-              >
-                ⭐ 如果 Joey Prompthub 帮到你，欢迎去 GitHub 点个Star✨
+            <div class="dl-card">
+              <div class="os" style="background: #e9e6df">Mac</div>
+              <h4>macOS 最新版</h4>
+              <div class="sz" id="mac-release-size">.dmg · 正在检查最新版</div>
+              <div class="release-status" id="mac-release-status" role="status">
+                正在读取 GitHub 最新正式版…
               </div>
-              <a
-                class="dl-btn alt"
-                href="https://github.com/Joey-233/Joey-Prompthub"
-                target="_blank"
-                rel="noopener noreferrer"
-                style="
-                  text-decoration: none;
-                  display: inline-flex;
-                  align-items: center;
-                  justify-content: center;
-                "
-                >查看仓库 · 顺手 Star ⭐</a
+              <button
+                class="dl-btn"
+                id="mac-download"
+                data-platform="macOS"
+                onclick="startDownload(this)"
+                disabled
               >
+                正在检查 <span>…</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1347,33 +1374,115 @@
         applyCooldownUI(btn, DOWNLOAD_COOLDOWN_MS)
       }
 
-      /* ===== GitHub 最新正式版：自动更新版本、大小与安装包直链 ===== */
+      /* ===== GitHub 最新正式版：自动更新版本、大小与各平台安装包直链 ===== */
       const GITHUB_LATEST_RELEASE_API =
         'https://api.github.com/repos/Joey-233/Joey-Prompthub/releases/latest'
+      const GITHUB_RELEASES_URL = 'https://github.com/Joey-233/Joey-Prompthub/releases'
 
       function formatReleaseBytes(bytes) {
         if (!Number.isFinite(bytes) || bytes <= 0) return ''
         return `${(bytes / 1024 / 1024).toFixed(1)} MB`
       }
 
+      function findWindowsAsset(assets) {
+        return assets.find((item) => /Joey[ -]Prompthub.*Setup-x64\.exe$/i.test(item.name || ''))
+      }
+
+      function findMacAsset(assets) {
+        const macAssets = assets.filter((item) =>
+          /Joey[ -]Prompthub.*macOS-(?:universal|arm64|x64)\.dmg$/i.test(item.name || '')
+        )
+        const preference = ['universal', 'arm64', 'x64']
+        return preference
+          .map((arch) =>
+            macAssets.find((item) => new RegExp(`macOS-${arch}\\.dmg$`, 'i').test(item.name || ''))
+          )
+          .find(Boolean)
+      }
+
+      function describeMacArchitecture(assetName) {
+        if (/macOS-universal\.dmg$/i.test(assetName)) return 'Universal'
+        if (/macOS-arm64\.dmg$/i.test(assetName)) return 'Apple 芯片'
+        if (/macOS-x64\.dmg$/i.test(assetName)) return 'Intel'
+        return 'macOS'
+      }
+
+      function restoreCooldown(btn) {
+        const name = btn.dataset.platform
+        const map = readCooldownMap()
+        const last = map[name] || 0
+        const remainingMs = DOWNLOAD_COOLDOWN_MS - (Date.now() - last)
+        if (remainingMs > 0) applyCooldownUI(btn, remainingMs)
+      }
+
+      function setReleaseButtonReady({ btn, status, size, asset, version, date, details }) {
+        btn.dataset.url = asset.browser_download_url
+        btn.dataset.originalLabel = `下载 v${version} <span>↓</span>`
+        btn.innerHTML = btn.dataset.originalLabel
+        btn.disabled = false
+        size.textContent = details(asset)
+        status.textContent = `最新正式版 v${version}${date ? ` · ${date}` : ''}`
+        status.dataset.state = 'ready'
+        restoreCooldown(btn)
+      }
+
+      function setReleaseButtonUnavailable({ btn, status, size, platform, details }) {
+        delete btn.dataset.url
+        delete btn.dataset.originalLabel
+        btn.disabled = true
+        btn.innerHTML = `${platform} 正式版待发布`
+        size.textContent = details
+        status.textContent = `最新 Release 暂未包含 ${platform} 安装包。`
+        status.dataset.state = 'error'
+      }
+
+      function setReleaseButtonFallback({ btn, status, size, details }) {
+        btn.dataset.url = GITHUB_RELEASES_URL
+        btn.dataset.originalLabel = '前往 Releases <span>↗</span>'
+        btn.innerHTML = btn.dataset.originalLabel
+        btn.disabled = false
+        size.textContent = details
+        status.textContent = '暂时无法读取最新版，点击后可在 Releases 页面手动选择。'
+        status.dataset.state = 'error'
+      }
+
       async function refreshLatestRelease() {
-        const btn = document.getElementById('windows-download')
-        const status = document.getElementById('windows-release-status')
-        const size = document.getElementById('windows-release-size')
-        if (!btn || !status || !size) return
+        const windows = {
+          btn: document.getElementById('windows-download'),
+          status: document.getElementById('windows-release-status'),
+          size: document.getElementById('windows-release-size')
+        }
+        const mac = {
+          btn: document.getElementById('mac-download'),
+          status: document.getElementById('mac-release-status'),
+          size: document.getElementById('mac-release-size')
+        }
+        if (
+          Object.values(windows).some((node) => !node) ||
+          Object.values(mac).some((node) => !node)
+        )
+          return
 
         try {
           const response = await fetch(GITHUB_LATEST_RELEASE_API, {
             headers: { Accept: 'application/vnd.github+json' }
           })
+          if (response.status === 404) {
+            setReleaseButtonUnavailable({
+              ...windows,
+              platform: 'Windows',
+              details: '.exe · x64 · 待发布'
+            })
+            setReleaseButtonUnavailable({
+              ...mac,
+              platform: 'macOS',
+              details: '.dmg · 待发布'
+            })
+            return
+          }
           if (!response.ok) throw new Error(`GitHub API ${response.status}`)
           const release = await response.json()
-          const asset = (release.assets || []).find((item) =>
-            /Joey[ -]Prompthub.*Setup-x64\.exe$/i.test(item.name || '')
-          )
-          if (!asset?.browser_download_url)
-            throw new Error('最新 Release 未包含 Windows x64 安装包')
-
+          const assets = Array.isArray(release.assets) ? release.assets : []
           const version = String(release.tag_name || '').replace(/^v/i, '') || '未知版本'
           const date = release.published_at
             ? new Intl.DateTimeFormat('zh-CN', {
@@ -1384,12 +1493,41 @@
               }).format(new Date(release.published_at))
             : ''
 
-          btn.dataset.url = asset.browser_download_url
-          btn.dataset.originalLabel = `下载 v${version} <span>↓</span>`
-          if (!btn.disabled) btn.innerHTML = btn.dataset.originalLabel
-          size.textContent = `.exe · ${formatReleaseBytes(asset.size)} · x64`
-          status.textContent = `最新正式版 v${version}${date ? ` · ${date}` : ''}`
-          status.dataset.state = 'ready'
+          const windowsAsset = findWindowsAsset(assets)
+          if (windowsAsset?.browser_download_url) {
+            setReleaseButtonReady({
+              ...windows,
+              asset: windowsAsset,
+              version,
+              date,
+              details: (asset) => `.exe · ${formatReleaseBytes(asset.size)} · x64`
+            })
+          } else {
+            setReleaseButtonUnavailable({
+              ...windows,
+              platform: 'Windows',
+              details: '.exe · x64 · 待发布'
+            })
+          }
+
+          const macAsset = findMacAsset(assets)
+          if (macAsset?.browser_download_url) {
+            setReleaseButtonReady({
+              ...mac,
+              asset: macAsset,
+              version,
+              date,
+              details: (asset) =>
+                `.dmg · ${formatReleaseBytes(asset.size)} · ${describeMacArchitecture(asset.name)}`
+            })
+          } else {
+            setReleaseButtonUnavailable({
+              ...mac,
+              platform: 'macOS',
+              details: '.dmg · 待发布'
+            })
+          }
+
           document.querySelectorAll('[data-app-version]').forEach((node) => {
             node.textContent = `v${version}`
           })
@@ -1400,20 +1538,17 @@
             })
           }
         } catch {
-          status.textContent = '暂时无法读取版本信息，点击后可前往 GitHub Releases 获取最新版。'
-          status.dataset.state = 'error'
-          size.textContent = '.exe · x64 · GitHub Releases'
+          setReleaseButtonFallback({
+            ...windows,
+            details: '.exe · x64 · GitHub Releases'
+          })
+          setReleaseButtonFallback({
+            ...mac,
+            details: '.dmg · GitHub Releases'
+          })
         }
       }
 
-      /* 页面加载时若 localStorage 里还有未过期的冷却，恢复 UI 状态 */
-      document.querySelectorAll('button[data-platform][data-url]').forEach((btn) => {
-        const name = btn.dataset.platform
-        const map = readCooldownMap()
-        const last = map[name] || 0
-        const remainingMs = DOWNLOAD_COOLDOWN_MS - (Date.now() - last)
-        if (remainingMs > 0) applyCooldownUI(btn, remainingMs)
-      })
       void refreshLatestRelease()
     </script>
   </body>

@@ -37,7 +37,7 @@ Never upload an unsigned local installer as an official release.
 
 ## Website
 
-`.github/workflows/pages.yml` deploys `docs/官网主页` to GitHub Pages after changes land on `main`. The static fallback version is synchronized from `package.json`; at runtime the page requests the latest GitHub Release and switches the download button to its signed Windows x64 installer.
+`.github/workflows/pages.yml` deploys `docs/官网主页` to GitHub Pages after changes land on `main`. The static fallback version is synchronized from `package.json`; at runtime the page requests the latest GitHub Release and switches the Windows and macOS buttons to their matching installer assets. A platform button stays disabled when that Release has no corresponding official installer.
 
 ## macOS
 
