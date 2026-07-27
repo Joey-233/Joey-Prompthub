@@ -1034,7 +1034,7 @@
                 ><b data-app-version>v0.3.0</b> ·
                 <time data-release-date datetime="2026-07-27">2026-07-27</time></span
               >
-              <span>正式发行附 SHA256</span>
+              <span>Windows 下载附 SHA256</span>
               <span>License · MIT</span>
             </div>
           </div>
@@ -1378,6 +1378,7 @@
       const GITHUB_LATEST_RELEASE_API =
         'https://api.github.com/repos/Joey-233/Joey-Prompthub/releases/latest'
       const GITHUB_RELEASES_URL = 'https://github.com/Joey-233/Joey-Prompthub/releases'
+      const DOWNLOAD_MANIFEST_URL = './download-manifest.json'
 
       function formatReleaseBytes(bytes) {
         if (!Number.isFinite(bytes) || bytes <= 0) return ''
@@ -1415,14 +1416,24 @@
         if (remainingMs > 0) applyCooldownUI(btn, remainingMs)
       }
 
-      function setReleaseButtonReady({ btn, status, size, asset, version, date, details }) {
+      function setReleaseButtonReady({
+        btn,
+        status,
+        size,
+        asset,
+        version,
+        date,
+        details,
+        statusMessage,
+        statusState = 'ready'
+      }) {
         btn.dataset.url = asset.browser_download_url
         btn.dataset.originalLabel = `下载 v${version} <span>↓</span>`
         btn.innerHTML = btn.dataset.originalLabel
         btn.disabled = false
         size.textContent = details(asset)
-        status.textContent = `最新正式版 v${version}${date ? ` · ${date}` : ''}`
-        status.dataset.state = 'ready'
+        status.textContent = statusMessage || `最新正式版 v${version}${date ? ` · ${date}` : ''}`
+        status.dataset.state = statusState
         restoreCooldown(btn)
       }
 
@@ -1444,6 +1455,67 @@
         size.textContent = details
         status.textContent = '暂时无法读取最新版，点击后可在 Releases 页面手动选择。'
         status.dataset.state = 'error'
+      }
+
+      async function refreshFromDownloadManifest(windows, mac) {
+        const response = await fetch(DOWNLOAD_MANIFEST_URL, { cache: 'no-store' })
+        if (!response.ok) throw new Error(`Download manifest ${response.status}`)
+        const manifest = await response.json()
+        const version = String(manifest.version || '').replace(/^v/i, '')
+        if (!version) throw new Error('Download manifest is missing a version')
+
+        const windowsRelease = manifest.windows
+        if (windowsRelease?.url) {
+          setReleaseButtonReady({
+            ...windows,
+            asset: {
+              name: windowsRelease.name,
+              size: Number(windowsRelease.size),
+              browser_download_url: windowsRelease.url
+            },
+            version,
+            date: manifest.publishedAt || '',
+            details: (asset) =>
+              `.exe · ${formatReleaseBytes(asset.size)} · ${windowsRelease.architecture || 'x64'}`,
+            statusMessage: windowsRelease.signed
+              ? `Windows v${version} · 已签名`
+              : `Windows v${version} · 即将签名 · 开发者：Joey`,
+            statusState: windowsRelease.signed ? 'ready' : 'error'
+          })
+        } else {
+          setReleaseButtonUnavailable({
+            ...windows,
+            platform: 'Windows',
+            details: '.exe · x64 · 待发布'
+          })
+        }
+
+        const macRelease = manifest.macos
+        if (macRelease?.url) {
+          setReleaseButtonReady({
+            ...mac,
+            asset: {
+              name: macRelease.name,
+              size: Number(macRelease.size),
+              browser_download_url: macRelease.url
+            },
+            version,
+            date: manifest.publishedAt || '',
+            details: (asset) =>
+              `.dmg · ${formatReleaseBytes(asset.size)} · ${macRelease.architecture || 'macOS'}`
+          })
+        } else {
+          setReleaseButtonUnavailable({
+            ...mac,
+            platform: 'macOS',
+            details: '.dmg · 待发布'
+          })
+        }
+
+        document.querySelectorAll('[data-app-version]').forEach((node) => {
+          node.textContent = `v${version}`
+        })
+        return true
       }
 
       async function refreshLatestRelease() {
@@ -1468,16 +1540,7 @@
             headers: { Accept: 'application/vnd.github+json' }
           })
           if (response.status === 404) {
-            setReleaseButtonUnavailable({
-              ...windows,
-              platform: 'Windows',
-              details: '.exe · x64 · 待发布'
-            })
-            setReleaseButtonUnavailable({
-              ...mac,
-              platform: 'macOS',
-              details: '.dmg · 待发布'
-            })
+            await refreshFromDownloadManifest(windows, mac)
             return
           }
           if (!response.ok) throw new Error(`GitHub API ${response.status}`)
@@ -1538,14 +1601,18 @@
             })
           }
         } catch {
-          setReleaseButtonFallback({
-            ...windows,
-            details: '.exe · x64 · GitHub Releases'
-          })
-          setReleaseButtonFallback({
-            ...mac,
-            details: '.dmg · GitHub Releases'
-          })
+          try {
+            await refreshFromDownloadManifest(windows, mac)
+          } catch {
+            setReleaseButtonFallback({
+              ...windows,
+              details: '.exe · x64 · GitHub Releases'
+            })
+            setReleaseButtonFallback({
+              ...mac,
+              details: '.dmg · GitHub Releases'
+            })
+          }
         }
       }
 

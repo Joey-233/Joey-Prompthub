@@ -1,0 +1,13 @@
+{
+  "version": "0.3.0",
+  "publishedAt": "2026-07-27",
+  "windows": {
+    "name": "Joey-Prompthub-0.3.0-Setup-x64.exe",
+    "url": "https://joeystudio.art/prompthub/download/Joey-Prompthub-0.3.0-Setup-x64.exe",
+    "size": 101510912,
+    "architecture": "x64",
+    "signed": false,
+    "sha256": "f6f2b056906d61245b2541f7817588db27406446fcf2d844cf044a57f5d10d5b"
+  },
+  "macos": null
+}

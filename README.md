@@ -15,11 +15,11 @@ Joey Prompthub 是一款 Windows 桌面提示词工作台，用悬浮球快速�
 
 ## 下载与校验
 
-正式安装包仅通过 [GitHub Releases](https://github.com/Joey-233/Joey-Prompthub/releases) 发布。发布流水线要求 Windows Authenticode 签名，并同时提供 `SHA256SUMS.txt`。
+正式签名安装包仅通过 [GitHub Releases](https://github.com/Joey-233/Joey-Prompthub/releases) 发布。发布流水线要求 Windows Authenticode 签名，并同时提供 `SHA256SUMS.txt`。签名前，官网可以提供明确标注“未签名”的 Windows 预览安装包；Windows 可能提示“未知发布者”。
 
-项目官网由 GitHub Pages 自动部署，并在浏览器中读取最新 Release 的版本号、发布日期、安装包大小和 Windows x64 直链：
+项目官网会优先读取最新 GitHub Release；尚无正式 Release 时，使用受版本控制的下载清单提供 Windows 预览版，并保持 macOS 为待发布：
 
-- [Joey Prompthub 官网](https://joey-233.github.io/Joey-Prompthub/)
+- [Joey Prompthub 官网](https://joeystudio.art/prompthub/)
 
 在 PowerShell 中校验：
 

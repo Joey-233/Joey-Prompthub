@@ -10,6 +10,9 @@ import { chromium } from 'playwright'
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const websiteHtml = await readFile(join(projectRoot, 'docs', '官网主页', 'index.html'))
+const downloadManifest = await readFile(
+  join(projectRoot, 'docs', '官网主页', 'download-manifest.json')
+)
 const screenshotDirectory = process.env.WEBSITE_SCREENSHOT_DIR || tmpdir()
 const githubApiUrl = 'https://api.github.com/repos/Joey-233/Joey-Prompthub/releases/latest'
 
@@ -17,6 +20,14 @@ const server = createServer((request, response) => {
   if (request.url === '/' || request.url === '/index.html') {
     response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
     response.end(websiteHtml)
+    return
+  }
+  if (request.url === '/download-manifest.json') {
+    response.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store'
+    })
+    response.end(downloadManifest)
     return
   }
   response.writeHead(404)
@@ -142,21 +153,33 @@ try {
 
   const noReleasePage = await preparePage({ width: 1280, height: 900 }, 404, '{}')
   await noReleasePage.waitForFunction(() =>
-    document.querySelector('#windows-download')?.textContent?.includes('待发布')
+    document.querySelector('#windows-download')?.dataset.url?.includes('0.3.0-Setup-x64.exe')
   )
-  assert.equal(await noReleasePage.locator('#windows-download').isDisabled(), true)
+  assert.equal(await noReleasePage.locator('#windows-download').isDisabled(), false)
+  assert.equal(
+    await noReleasePage.locator('#windows-download').getAttribute('data-url'),
+    'https://joeystudio.art/prompthub/download/Joey-Prompthub-0.3.0-Setup-x64.exe'
+  )
+  assert.match(
+    await noReleasePage.locator('#windows-release-status').innerText(),
+    /即将签名 · 开发者：Joey/
+  )
   assert.equal(await noReleasePage.locator('#mac-download').isDisabled(), true)
   assert.match(
     await noReleasePage.locator('#mac-release-status').innerText(),
     /暂未包含 macOS 安装包/
   )
+  await noReleasePage.locator('#download').scrollIntoViewIfNeeded()
+  const manifestScreenshot = join(screenshotDirectory, 'joey-download-manifest.png')
+  await noReleasePage.locator('#download').screenshot({ path: manifestScreenshot })
   await noReleasePage.close()
 
   console.log(
     JSON.stringify({
       desktopScreenshot,
       mobileScreenshot,
-      scenarios: ['ready', 'no-release'],
+      manifestScreenshot,
+      scenarios: ['github-release', 'manifest-fallback'],
       result: 'passed'
     })
   )
