@@ -51,13 +51,39 @@ protocol.registerSchemesAsPrivileged([
   }
 ])
 
-function attachMainWindowCloseBehavior() {
-  mainWindow?.on('close', (event) => {
-    if (!isQuitting) {
-      event.preventDefault()
-      mainWindow?.hide()
-    }
+/**
+ * 关闭主窗口 = 销毁渲染进程以释放常驻内存（悬浮球才是常驻部分）。
+ * 销毁前给渲染进程一次 flush 机会（保存未落库的编辑草稿），最多等 2 秒，
+ * 避免渲染进程卡死时窗口关不掉。Seedance2 的编辑会话由渲染进程持续写入
+ * localStorage，窗口销毁后仍在，重开时自动恢复。
+ */
+const FLUSH_TIMEOUT_MS = 2000
+
+function attachMainWindowCloseBehavior(window: BrowserWindow) {
+  let closeRequested = false
+  window.on('close', (event) => {
+    if (isQuitting || closeRequested) return
+    event.preventDefault()
+    closeRequested = true
+    // 先从全局引用摘除：flush 期间用户再点悬浮球会创建新窗口，
+    // 而不是把一个正在销毁的窗口又 show 回来。
+    if (mainWindow === window) mainWindow = null
+    void flushRendererAndDestroy(window)
   })
+}
+
+async function flushRendererAndDestroy(window: BrowserWindow) {
+  try {
+    await Promise.race([
+      window.webContents.executeJavaScript(
+        'window.__prompthubBeforeClose ? window.__prompthubBeforeClose() : Promise.resolve()'
+      ),
+      new Promise<undefined>((resolve) => setTimeout(resolve, FLUSH_TIMEOUT_MS))
+    ])
+  } catch {
+    // 渲染进程已不可用（崩溃或仍在加载）——直接关闭
+  }
+  if (!window.isDestroyed()) window.destroy()
 }
 
 function openMainWindow() {
@@ -72,7 +98,7 @@ function openMainWindow() {
   }
 
   mainWindow = createMainWindow()
-  attachMainWindowCloseBehavior()
+  attachMainWindowCloseBehavior(mainWindow)
 }
 
 function ensureFloatingBallWindow() {

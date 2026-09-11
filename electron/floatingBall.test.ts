@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const setBoundsCalls: Array<{ x: number; y: number; width: number; height: number }> = []
 const ignoreCalls: Array<{ ignore: boolean; forward?: boolean }> = []
+const windowEvents = new Map<string, Array<() => void>>()
 
 const fakeWindow = {
   setBounds: vi.fn((bounds: { x: number; y: number; width: number; height: number }) => {
@@ -24,14 +25,20 @@ const fakeWindow = {
   moveTop: vi.fn(),
   loadURL: vi.fn(() => Promise.resolve()),
   loadFile: vi.fn(() => Promise.resolve()),
-  on: vi.fn(),
+  on: vi.fn((event: string, handler: () => void) => {
+    if (!windowEvents.has(event)) windowEvents.set(event, [])
+    windowEvents.get(event)!.push(handler)
+  }),
   once: vi.fn((event: string, handler: () => void) => {
     if (event === 'ready-to-show') {
-      // Fire synchronously so the hover-poll setup runs in tests.
       handler()
     }
   }),
   webContents: { send: vi.fn(), on: vi.fn(), setWindowOpenHandler: vi.fn() }
+}
+
+function fireWindowEvent(event: string) {
+  for (const handler of windowEvents.get(event) ?? []) handler()
 }
 
 const cursorPoint = { x: 0, y: 0 }
@@ -57,6 +64,7 @@ beforeEach(() => {
   vi.useFakeTimers()
   setBoundsCalls.length = 0
   ignoreCalls.length = 0
+  windowEvents.clear()
   fakeWindow.setBounds.mockClear()
   fakeWindow.setAlwaysOnTop.mockClear()
   fakeWindow.setVisibleOnAllWorkspaces.mockClear()
@@ -183,7 +191,9 @@ describe('floating ball click-through hover poll', () => {
     const ball = createFloatingBallWindow()
     const state = ball.getState()
 
-    // After ready-to-show fires the poll is started and click-through is on.
+    // The poll only runs while the window is visible; showing it evaluates
+    // click-through immediately (cursor at 0,0 is far from the ball).
+    fireWindowEvent('show')
     expect(ignoreCalls.at(-1)).toEqual({ ignore: true, forward: true })
 
     // Move the cursor onto the centre of the ball (window is 120×120, ball is centered) and tick once.
@@ -197,12 +207,27 @@ describe('floating ball click-through hover poll', () => {
     cursorPoint.y = 0
     vi.advanceTimersByTime(100)
     expect(ignoreCalls.at(-1)).toEqual({ ignore: true, forward: true })
+
+    // Hiding the window stops the poll entirely: no further toggles fire.
+    fireWindowEvent('hide')
+    const togglesAfterHide = ignoreCalls.length
+    cursorPoint.x = state.x + 60
+    cursorPoint.y = state.y + 60
+    vi.advanceTimersByTime(500)
+    expect(ignoreCalls.length).toBe(togglesAfterHide)
+
+    // …and showing it again re-evaluates immediately (cursor is far again).
+    cursorPoint.x = 0
+    cursorPoint.y = 0
+    fireWindowEvent('show')
+    expect(ignoreCalls.at(-1)).toEqual({ ignore: true, forward: true })
   })
 
   it('forces interaction during a drag (ignoreMouseEvents false) even if cursor leaves the circle', () => {
     const ball = createFloatingBallWindow()
     const state = ball.getState()
 
+    fireWindowEvent('show')
     cursorPoint.x = state.x + 60
     cursorPoint.y = state.y + 60
     ignoreCalls.length = 0

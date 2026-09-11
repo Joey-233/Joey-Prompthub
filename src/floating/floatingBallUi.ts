@@ -1,12 +1,11 @@
 import type { FloatingWindowState, PromptHubFloatingApi } from '../shared/types'
 
 const DRAG_THRESHOLD = 6
-const CLICK_DELAY_MS = 220
 
 export function mountFloatingBall(root: HTMLElement, api: PromptHubFloatingApi) {
   root.innerHTML = `
     <main class="floating-root">
-      <button aria-label="打开 Joey Prompthub 快捷菜单" class="floating-ball-button" data-dragging="false" data-side="right" type="button">
+      <button aria-label="打开 Joey Prompthub 主面板（右键打开快捷菜单）" class="floating-ball-button" data-dragging="false" data-side="right" type="button">
         <span class="floating-ball-brand">prompt</span>
       </button>
     </main>
@@ -14,7 +13,6 @@ export function mountFloatingBall(root: HTMLElement, api: PromptHubFloatingApi) 
   const button = root.querySelector<HTMLButtonElement>('.floating-ball-button')
   if (!button) throw new Error('浮球按钮初始化失败')
 
-  let clickTimer: number | null = null
   let drag = { active: false, moved: false, pointerId: -1, startX: 0, startY: 0 }
 
   const applyState = (state: FloatingWindowState) => {
@@ -22,14 +20,6 @@ export function mountFloatingBall(root: HTMLElement, api: PromptHubFloatingApi) 
   }
   const ignoreFailure = () => undefined
   void api.getState().then(applyState).catch(ignoreFailure)
-
-  const scheduleQuickMenu = () => {
-    if (clickTimer !== null) window.clearTimeout(clickTimer)
-    clickTimer = window.setTimeout(() => {
-      clickTimer = null
-      void api.showContextMenu().catch(ignoreFailure)
-    }, CLICK_DELAY_MS)
-  }
 
   const finishDrag = (snap: boolean, wasClick: boolean) => {
     if (!drag.active) return
@@ -42,7 +32,8 @@ export function mountFloatingBall(root: HTMLElement, api: PromptHubFloatingApi) 
       // Pointer capture is best-effort across Electron/Windows versions.
     }
     void api.dragEnd(snap).then(applyState).catch(ignoreFailure)
-    if (wasClick) scheduleQuickMenu()
+    // 单击 = 直接打开主面板；快捷菜单在右键 / 键盘菜单键里。无需延时区分双击。
+    if (wasClick) void api.openMainWindow().catch(ignoreFailure)
   }
 
   const onPointerDown = (event: PointerEvent) => {
@@ -91,21 +82,12 @@ export function mountFloatingBall(root: HTMLElement, api: PromptHubFloatingApi) 
     event.preventDefault()
     void api.showContextMenu().catch(ignoreFailure)
   }
-  const onDoubleClick = (event: MouseEvent) => {
-    event.preventDefault()
-    if (clickTimer !== null) {
-      window.clearTimeout(clickTimer)
-      clickTimer = null
-    }
-    void api.openMainWindow().catch(ignoreFailure)
-  }
   const onKeyDown = (event: KeyboardEvent) => {
-    if (
-      event.key === 'Enter' ||
-      event.key === ' ' ||
-      event.key === 'ContextMenu' ||
-      (event.key === 'F10' && event.shiftKey)
-    ) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      // 按钮语义：回车 / 空格 = 打开主面板
+      event.preventDefault()
+      void api.openMainWindow().catch(ignoreFailure)
+    } else if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) {
       event.preventDefault()
       void api.showContextMenu().catch(ignoreFailure)
     }
@@ -113,7 +95,6 @@ export function mountFloatingBall(root: HTMLElement, api: PromptHubFloatingApi) 
 
   button.addEventListener('pointerdown', onPointerDown)
   button.addEventListener('contextmenu', onContextMenu)
-  button.addEventListener('dblclick', onDoubleClick)
   button.addEventListener('keydown', onKeyDown)
   window.addEventListener('pointermove', onPointerMove)
   window.addEventListener('pointerup', onPointerUp)
@@ -121,10 +102,8 @@ export function mountFloatingBall(root: HTMLElement, api: PromptHubFloatingApi) 
   window.addEventListener('blur', onBlur)
 
   return () => {
-    if (clickTimer !== null) window.clearTimeout(clickTimer)
     button.removeEventListener('pointerdown', onPointerDown)
     button.removeEventListener('contextmenu', onContextMenu)
-    button.removeEventListener('dblclick', onDoubleClick)
     button.removeEventListener('keydown', onKeyDown)
     window.removeEventListener('pointermove', onPointerMove)
     window.removeEventListener('pointerup', onPointerUp)

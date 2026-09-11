@@ -40,6 +40,11 @@ import {
   serializeTemplate
 } from './seedance2/serialize'
 import { UnsavedChangesDialog } from './seedance2/UnsavedChangesDialog'
+import {
+  clearSeedance2Session,
+  readSeedance2Session,
+  saveSeedance2Session
+} from './seedance2/session'
 
 const api = () => window.promptHub.seedance2
 type PendingAction =
@@ -114,6 +119,8 @@ export function Seedance2() {
   } | null>(null)
   const [presetSaving, setPresetSaving] = useState(false)
   const [presetError, setPresetError] = useState<string | null>(null)
+  // 初始加载完成（恢复/默认模板判定已给出）之前，禁止镜像 effect 清除关窗会话
+  const [sessionResolved, setSessionResolved] = useState(false)
   const revision = useRef(0)
   const savingRef = useRef(false)
   const refs = useRef<Record<string, HTMLElement | null>>({})
@@ -154,6 +161,8 @@ export function Seedance2() {
   }
   useEffect(() => {
     let cancelled = false
+    // 初始加载还没给出恢复判定前，脏会话镜像 effect 不得清除键位
+    const restored = readSeedance2Session()
     void api()
       .listTemplates()
       .then(async (list) => {
@@ -165,31 +174,47 @@ export function Seedance2() {
           const configuredId = settings[SEEDANCE2_DEFAULT_TEMPLATE_SETTING_KEY]
           const defaultId = typeof configuredId === 'string' ? configuredId : null
           const defaultTemplate = list.find((item) => item.id === defaultId)
+
           if (defaultTemplate) {
-            const data = normalizeTemplateData(defaultTemplate.data)
-            revision.current++
-            lastActiveSegmentId.current = null
             setDefaultTemplateId(defaultTemplate.id)
-            setCurrentId(defaultTemplate.id)
-            setTitle(defaultTemplate.title)
-            setDraft(data)
-            setActiveSectionId(data.sections[0]?.id ?? null)
-            setDirty(false)
           } else {
             setDefaultTemplateId(null)
             if (defaultId) {
               await window.promptHub.settings.set(SEEDANCE2_DEFAULT_TEMPLATE_SETTING_KEY, null)
             }
           }
+
+          // 关窗时的未保存编辑优先于默认模板加载
+          if (restored) {
+            revision.current++
+            lastActiveSegmentId.current = null
+            setCurrentId(restored.currentId)
+            setTitle(restored.title)
+            setDraft(restored.draft)
+            setActiveSectionId(restored.activeSectionId)
+            setDirty(true)
+          } else if (defaultTemplate) {
+            const data = normalizeTemplateData(defaultTemplate.data)
+            revision.current++
+            lastActiveSegmentId.current = null
+            setCurrentId(defaultTemplate.id)
+            setTitle(defaultTemplate.title)
+            setDraft(data)
+            setActiveSectionId(data.sections[0]?.id ?? null)
+            setDirty(false)
+          }
         } catch (error) {
           if (!cancelled) {
             setDefaultError(error instanceof Error ? error.message : '读取默认模板设置失败')
           }
+        } finally {
+          if (!cancelled) setSessionResolved(true)
         }
       })
       .catch((error) => {
         if (!cancelled) {
           setSaveError(error instanceof Error ? error.message : '模板加载失败')
+          setSessionResolved(true)
         }
       })
     void api()
@@ -201,6 +226,17 @@ export function Seedance2() {
       cancelled = true
     }
   }, [])
+
+  // 编辑态镜像到 localStorage：脏会话随写随存，保存/重置后清除。
+  // 窗口销毁后仍可从磁盘分区恢复，支撑「关窗 = 销毁进程」的内存优化。
+  useEffect(() => {
+    if (!sessionResolved) return
+    if (!dirty) {
+      clearSeedance2Session()
+      return
+    }
+    saveSeedance2Session({ currentId, title, draft, activeSectionId })
+  }, [sessionResolved, currentId, title, draft, activeSectionId, dirty])
 
   const request = (action: PendingAction) => {
     if (dirty) setPending(action)

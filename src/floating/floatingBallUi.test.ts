@@ -16,13 +16,11 @@ function api(): PromptHubFloatingApi {
 }
 
 afterEach(() => {
-  vi.useRealTimers()
   document.body.innerHTML = ''
 })
 
 describe('floating ball UI', () => {
-  it('opens the quick menu on a single click and the main window on double click', async () => {
-    vi.useFakeTimers()
+  it('opens the main window immediately on a single click', async () => {
     const bridge = api()
     const root = document.body.appendChild(document.createElement('div'))
     const cleanup = mountFloatingBall(root, bridge)
@@ -30,15 +28,13 @@ describe('floating ball UI', () => {
 
     fireEvent.pointerDown(button, { button: 0, pointerId: 1, screenX: 120, screenY: 120 })
     fireEvent.pointerUp(window, { pointerId: 1, screenX: 120, screenY: 120 })
-    await vi.advanceTimersByTimeAsync(220)
-    expect(bridge.showContextMenu).toHaveBeenCalledTimes(1)
-
-    fireEvent.doubleClick(button)
+    await Promise.resolve()
     expect(bridge.openMainWindow).toHaveBeenCalledTimes(1)
+    expect(bridge.showContextMenu).not.toHaveBeenCalled()
     cleanup()
   })
 
-  it('marks a drag and ends it with snapping enabled', () => {
+  it('does not open the main window after a drag', () => {
     const bridge = api()
     const root = document.body.appendChild(document.createElement('div'))
     const cleanup = mountFloatingBall(root, bridge)
@@ -49,17 +45,31 @@ describe('floating ball UI', () => {
     expect(button).toHaveAttribute('data-dragging', 'true')
     fireEvent.pointerUp(window, { pointerId: 2, screenX: 120, screenY: 100 })
     expect(bridge.dragEnd).toHaveBeenCalledWith(true)
+    expect(bridge.openMainWindow).not.toHaveBeenCalled()
     cleanup()
   })
 
-  it('supports keyboard and context-menu access', () => {
+  it('keeps the context menu on right click and the menu keyboard key', () => {
+    const bridge = api()
+    const root = document.body.appendChild(document.createElement('div'))
+    const cleanup = mountFloatingBall(root, bridge)
+    const button = root.querySelector('button')!
+    fireEvent.contextMenu(button)
+    fireEvent.keyDown(button, { key: 'ContextMenu' })
+    expect(bridge.showContextMenu).toHaveBeenCalledTimes(2)
+    expect(bridge.openMainWindow).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('activates the main window with Enter and Space', () => {
     const bridge = api()
     const root = document.body.appendChild(document.createElement('div'))
     const cleanup = mountFloatingBall(root, bridge)
     const button = root.querySelector('button')!
     fireEvent.keyDown(button, { key: 'Enter' })
-    fireEvent.contextMenu(button)
-    expect(bridge.showContextMenu).toHaveBeenCalledTimes(2)
+    fireEvent.keyDown(button, { key: ' ' })
+    expect(bridge.openMainWindow).toHaveBeenCalledTimes(2)
+    expect(bridge.showContextMenu).not.toHaveBeenCalled()
     cleanup()
   })
 })

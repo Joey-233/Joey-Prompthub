@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Seedance2TemplateRecord } from '../shared/types'
 import { useAppStore } from '../stores/appStore'
@@ -27,6 +27,11 @@ function seedApi() {
 }
 
 describe('Seedance2 workspace', () => {
+  // 关窗会话保存在 localStorage；不清掉的话上一个用例的脏会话会触发恢复逻辑。
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
   it('loads the saved default template and marks it in both template surfaces', async () => {
     seedApi()
     vi.mocked(window.promptHub.settings.list).mockResolvedValue({
@@ -40,6 +45,29 @@ describe('Seedance2 workspace', () => {
     expect(screen.getByRole('button', { name: '默认模板' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: 'Two' })).toHaveAttribute('data-default', 'true')
     expect(screen.getByText('默认', { selector: '.s2-default-badge' })).toBeVisible()
+  })
+
+  it('restores the unsaved session left behind by a closed window over the default template', async () => {
+    seedApi()
+    vi.mocked(window.promptHub.settings.list).mockResolvedValue({
+      seedance2_default_template_id: 'two'
+    })
+    localStorage.setItem(
+      'prompthub.seedance2.session.v1',
+      JSON.stringify({
+        currentId: null,
+        title: '关窗前的草稿',
+        draft: {
+          sections: [{ id: 'intro', title: '开篇总述', kind: 'text', content: '恢复的内容' }]
+        },
+        activeSectionId: 'intro'
+      })
+    )
+
+    render(<Seedance2 />)
+
+    expect(await screen.findByLabelText('模板标题')).toHaveValue('关窗前的草稿')
+    expect(screen.getByLabelText('开篇总述内容')).toHaveValue('恢复的内容')
   })
 
   it('sets a saved custom template as the default', async () => {

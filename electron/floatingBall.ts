@@ -200,12 +200,13 @@ export function createFloatingBallWindow(
 
   function startHoverPoll() {
     if (hoverPoll) return
-    setClickThrough(true)
-    hoverPoll = setInterval(() => {
+    const evaluate = () => {
       if (window.isDestroyed() || isDragging) return
       const cursor = screen.getCursorScreenPoint()
       setClickThrough(!isCursorInsideBall(cursor))
-    }, HOVER_TICK_MS)
+    }
+    evaluate()
+    hoverPoll = setInterval(evaluate, HOVER_TICK_MS)
   }
 
   function stopHoverPoll() {
@@ -288,7 +289,6 @@ export function createFloatingBallWindow(
   window.once('ready-to-show', () => {
     if (options.initiallyVisible !== false) window.showInactive()
     keepAbove(window)
-    startHoverPoll()
 
     if (DEBUG_DRAG && process.platform === 'win32') {
       try {
@@ -303,7 +303,17 @@ export function createFloatingBallWindow(
     }
   })
 
-  window.on('show', () => keepAbove(window))
+  window.on('show', () => {
+    keepAbove(window)
+    startHoverPoll()
+  })
+  window.on('hide', () => {
+    // 隐藏期间不轮询光标；拖拽状态一并复位，避免丢掉 pointerup 后 dragLoop 空转。
+    clearDragLoop()
+    isDragging = false
+    setClickThrough(false)
+    stopHoverPoll()
+  })
   const restoreToVisibleArea = () => {
     const next = setPositionRaw(state.x, state.y, state.side)
     options.onStateChange?.(next)
